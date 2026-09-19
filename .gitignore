@@ -11,6 +11,10 @@ secrets/
 # Cache de descoberta de modelos (pode conter metadados da conta)
 providers.local.json
 
+# Logs do PM2
+logs/
+*.log
+
 # ---------------------------------------------------------------
 # Python
 # ---------------------------------------------------------------

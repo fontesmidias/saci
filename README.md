@@ -54,6 +54,35 @@ type arquivo.py | py ask.py -p code "adicione testes:"
 | `long` | textos longos, contexto grande | Google `gemini-3.6-flash` |
 | `pt` | português corporativo, documentos | Google `gemini-3.6-flash` |
 
+## Servidor local (para extensões do VSCode)
+
+Expõe o router como uma API compatível com a OpenAI, para plugar em
+Cline, Continue, Aider e afins.
+
+```powershell
+llm-on       # liga (fica em segundo plano via PM2)
+llm-status   # mostra estado + testa provedores
+llm-logs     # logs ao vivo (Ctrl+C sai)
+llm-off      # desliga
+```
+
+Com o PM2 você pode fechar o terminal: o servidor continua rodando e
+reinicia sozinho se cair.
+
+### Configuração na extensão
+
+| Campo | Valor |
+|---|---|
+| Base URL | `http://127.0.0.1:8000/v1` |
+| API Key | qualquer coisa (não é verificada) |
+| Model | `router-code`, `router-plan`, `router-fast`, `router-long` ou `router-pt` |
+
+Cada perfil aparece como um "modelo" na extensão. A resposta traz um campo
+extra `x_router` dizendo qual provedor de fato atendeu e em quanto tempo.
+
+> O servidor escuta só em `127.0.0.1` e **não exige autenticação**.
+> Não o exponha na rede sem antes adicionar uma.
+
 ### Como biblioteca
 
 ```python
