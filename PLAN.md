@@ -69,6 +69,36 @@ Hoje o log vai para o stderr e o PM2 guarda. Sem PM2, precisa ser nosso.
 `Dados:` e `Log:` com os caminhos resolvidos), o ciclo do catálogo e uma
 chamada de chat real — sem vazar chave.
 
+## Etapa 1.5 — Migrações do banco (`saci/migrations.py`) ✅ concluída, não estava no plano original
+
+**Por que entrou:** antes desta etapa, `usage.py::init()` fazia
+`DROP TABLE quota` sempre que detectava o schema antigo, com o comentário
+"é só cache" — que não é mais verdade (a tabela guarda a cota lida dos
+headers). Isso é seguro em desenvolvimento, mas um app que se atualiza
+sozinho (Etapa 6+) rodaria esse `DROP TABLE` na máquina de um usuário real a
+cada mudança de schema futura, apagando cota ou catálogo sem aviso.
+
+- [x] `saci/migrations.py`: migrações numeradas e aditivas (`_m001_*`,
+      `_m002_*`, ...), uma tabela `schema_version` registra o que já rodou
+- [x] A migração que precisava mudar a chave primária de `quota` (de
+      `provider` para `provider, model`) virou `RENAME` + `CREATE`, não
+      `DROP`: dados no formato antigo vão para `quota_legacy_v1`,
+      preservados, nunca apagados
+- [x] `usage.py` e `catalog.py` — que gravam no mesmo arquivo — chamam o
+      mesmo `migrations.migrate()` em vez de dois `init()` independentes
+- [x] Testado com um banco simulando exatamente o schema da v0.1.0
+      publicada, com 30 dias de histórico e uma leitura de cota real:
+      as 30 linhas de `calls` sobreviveram, a leitura antiga foi
+      preservada em `quota_legacy_v1`
+- [x] Testada a idempotência (rodar duas vezes não duplica nem reaplica)
+- [x] Banco de produção real (o do autor, com histórico de uso) migrado
+      sem perda: 20 chamadas antes e depois
+
+**Regra para qualquer migração futura:** nunca `DROP TABLE`/`ALTER` direto em
+`usage.py`/`catalog.py`. Toda mudança de schema é uma nova função em
+`migrations.py`, aditiva ou com `RENAME` em vez de `DROP`. Documentado em
+CONTRIBUTING.md e CONTRIBUTING.pt-BR.md.
+
 ## Etapa 3 — Tela de configurações (`saci/settings.html` + endpoints)
 
 O que hoje exige editar `.env` na mão.

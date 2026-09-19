@@ -137,38 +137,6 @@ def provider_day(provider: str, when: datetime | None = None) -> str:
     now = when or datetime.now(timezone.utc)
     return (now + timedelta(hours=tz_h)).strftime("%Y-%m-%d")
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS calls (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts          TEXT    NOT NULL,
-    day         TEXT    NOT NULL,
-    provider    TEXT    NOT NULL,
-    model       TEXT    NOT NULL,
-    profile     TEXT,
-    ok          INTEGER NOT NULL,
-    tokens      INTEGER DEFAULT 0,
-    latency     REAL,
-    error       TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_calls_day ON calls(day, provider, model);
-
--- Cota por (provedor, modelo). reset_*_at guarda o INSTANTE do reset,
--- para o painel mostrar contagem regressiva ao vivo.
-CREATE TABLE IF NOT EXISTS quota (
-    provider            TEXT NOT NULL,
-    model               TEXT NOT NULL,
-    ts                  TEXT NOT NULL,
-    limit_requests      INTEGER,
-    remaining_requests  INTEGER,
-    limit_tokens        INTEGER,
-    remaining_tokens    INTEGER,
-    reset_requests_at   TEXT,
-    reset_tokens_at     TEXT,
-    PRIMARY KEY (provider, model)
-);
-"""
-
-
 @contextmanager
 def _db():
     conn = sqlite3.connect(paths.db_path(), timeout=10.0)
@@ -181,13 +149,19 @@ def _db():
 
 
 def init() -> None:
-    with _lock, _db() as conn:
-        # A tabela quota mudou de chave (provider) para (provider, model).
-        # Se existir no formato antigo, recria: é só cache, não histórico.
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(quota)").fetchall()}
-        if cols and "model" not in cols:
-            conn.execute("DROP TABLE quota")
-        conn.executescript(SCHEMA)
+    """
+    Garante o schema atual, sem apagar dado nenhum do usuário.
+
+    A criação das tabelas e qualquer mudança de schema vivem em
+    saci/migrations.py (uma fonte só, porque catalog.py grava no mesmo
+    arquivo). Ver o histórico de commits: antes disso, uma mudança de
+    schema virava `DROP TABLE quota` condicional aqui — funcionava em
+    desenvolvimento, mas apagaria o histórico de cota de um usuário
+    real numa atualização.
+    """
+    from . import migrations
+    with _lock:
+        migrations.migrate()
 
 
 def parse_duration(text: str | None) -> float | None:

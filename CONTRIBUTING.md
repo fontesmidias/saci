@@ -43,6 +43,21 @@ Open an issue with the provider, the old limit, the new one and where you saw it
 (headers, dashboard, docs). Limits change silently; this is how the table stays
 honest.
 
+## Changing the database schema
+
+`usage.db` holds real user history — quota usage and the discovered model
+catalog. **Never `DROP TABLE` or `ALTER` a table directly in `usage.py` or
+`catalog.py`.** Every schema change is a new numbered migration in
+`saci/migrations.py`, added to the end of `MIGRATIONS`. It must be additive
+(`CREATE TABLE`, `ALTER TABLE ADD COLUMN`) or, when it must change a primary
+key, rename the old table instead of dropping it (see `_m002_*` for the
+pattern). A migration that would lose data needs the user's explicit sign-off
+first — that's not a decision to make alone in a PR.
+
+Test a migration against a database that already has rows, not just an empty
+one: create one with the *old* schema, insert a few realistic rows, run
+`saci.usage.init()`, and confirm the rows are still there.
+
 ## Code style
 
 `ruff check saci` must pass. Match the surrounding code: small modules, comments

@@ -78,35 +78,6 @@ NOT_CHAT = re.compile(
     re.I,
 )
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS models (
-    provider        TEXT NOT NULL,
-    model           TEXT NOT NULL,
-    name            TEXT,
-    context         INTEGER,
-    free_by_catalog INTEGER,          -- 1/0 quando o catálogo informa; NULL se não
-    status          TEXT NOT NULL,    -- new|ok|paid|gone|ratelimited|error|auth
-    detail          TEXT,
-    latency_ms      INTEGER,
-    probes          INTEGER DEFAULT 0,
-    first_seen      TEXT NOT NULL,
-    last_seen       TEXT NOT NULL,
-    last_probe      TEXT,
-    misses          INTEGER DEFAULT 0,
-    PRIMARY KEY (provider, model)
-);
-CREATE TABLE IF NOT EXISTS catalog_runs (
-    provider    TEXT NOT NULL,
-    ts          TEXT NOT NULL,
-    listed      INTEGER,
-    chat        INTEGER,
-    probed      INTEGER,
-    ok          INTEGER,
-    error       TEXT
-);
-"""
-
-
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -127,8 +98,10 @@ def _db():
 
 
 def init() -> None:
-    with _lock, _db() as conn:
-        conn.executescript(SCHEMA)
+    """Garante o schema atual. As tabelas vivem em saci/migrations.py."""
+    from . import migrations
+    with _lock:
+        migrations.migrate()
 
 
 # ---------------------------------------------------------------------

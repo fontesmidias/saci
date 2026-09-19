@@ -43,6 +43,21 @@ Abra uma issue com o provedor, o limite antigo, o novo e onde você viu (headers
 painel, documentação). Limites mudam em silêncio; é assim que a tabela continua
 honesta.
 
+## Mudando o schema do banco de dados
+
+O `usage.db` guarda histórico real do usuário — consumo de cota e o catálogo
+de modelos descoberto. **Nunca faça `DROP TABLE` ou `ALTER` direto numa tabela
+em `usage.py` ou `catalog.py`.** Toda mudança de schema é uma migração numerada
+nova em `saci/migrations.py`, adicionada ao final de `MIGRATIONS`. Ela precisa
+ser aditiva (`CREATE TABLE`, `ALTER TABLE ADD COLUMN`) ou, quando precisar
+mudar uma chave primária, renomear a tabela antiga em vez de descartá-la (veja
+`_m002_*` para o padrão). Uma migração que perderia dado exige combinar com o
+usuário antes — não é uma decisão para tomar sozinho num PR.
+
+Teste uma migração contra um banco que já tem linhas, não só um vazio: crie um
+com o schema *antigo*, insira algumas linhas realistas, rode `saci.usage.init()`
+e confirme que as linhas continuam lá.
+
 ## Estilo de código
 
 `ruff check saci` precisa passar. Siga o código ao redor: módulos pequenos,
