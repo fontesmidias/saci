@@ -29,7 +29,6 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from . import paths
 
