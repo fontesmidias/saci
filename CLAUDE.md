@@ -84,6 +84,31 @@ Nunca escrever no código, na documentação ou para o usuário que algo
 "funciona", "é rápido" ou "está disponível" sem ter executado e visto o
 resultado. Se não deu para testar, diga que não testou.
 
+### R7 — Mudança de schema é migração, nunca DROP direto
+
+Toda alteração no schema de `usage.db` é uma função nova e numerada em
+`saci/migrations.py`, aditiva (`CREATE TABLE`, `ALTER TABLE ADD COLUMN`) ou,
+quando precisa mudar uma chave primária, com `RENAME` da tabela antiga —
+nunca `DROP TABLE`/`ALTER` direto em `usage.py` ou `catalog.py`. Uma
+migração que perderia dado do usuário exige combinar com ele antes; não é
+decisão para tomar sozinho num commit. Teste toda migração contra um banco
+que já tem linhas no schema *antigo*, não só um banco vazio.
+
+*Por quê:* isto já aconteceu — `usage.py::init()` fazia `DROP TABLE quota`
+com o comentário "é só cache", que não era mais verdade. Funcionava em
+desenvolvimento porque era sempre o mesmo autor recriando o banco; num
+usuário real que atualiza o app, isso apaga histórico sem aviso.
+
+### R8 — Tag só em marco fechado, nunca em commit intermediário
+
+Uma tag/release marca "isto pode ser instalado e usado", não "isto
+compilou". Commits de etapa dentro de um plano em andamento (como as etapas
+do PLAN.md) não ganham tag — cada um tem mensagem completa, mas a tag
+espera o marco fechar (um lançamento usável: v0.1.0, v0.2.0-alpha.1 quando
+uma etapa produz algo que roda de ponta a ponta pela primeira vez, v0.2.0
+no fim do plano). Se terminar uma sessão de trabalho sem ter fechado um
+marco, isso é esperado — não force uma tag para preencher a lacuna.
+
 ---
 
 ## Como trabalhar aqui
