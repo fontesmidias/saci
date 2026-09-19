@@ -1,0 +1,217 @@
+"""
+Cascata de fallback entre provedores de LLM.
+
+Tenta cada provedor na ordem configurada; ao receber rate limit (429),
+indisponibilidade (5xx), timeout ou modelo removido (404/410), passa
+para o próximo modelo e depois para o próximo provedor.
+
+Uso:
+    from llmrouter import LLMRouter
+
+    router = LLMRouter()
+    r = router.ask("Explique o que é um índice em banco de dados.")
+    print(r.content)
+    print(r.provider, r.model, r.latency)
+"""
+
+from __future__ import annotations
+
+import os
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable, Iterable
+
+from dotenv import load_dotenv
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    InternalServerError,
+    NotFoundError,
+    OpenAI,
+    RateLimitError,
+)
+
+from .providers import DEFAULT_ORDER, DEFAULT_PROFILE, PROFILES, PROVIDERS, Provider
+
+ROOT = Path(__file__).resolve().parent.parent
+
+# Erros que significam "este modelo/provedor não vai servir AGORA" —
+# vale a pena tentar o próximo em vez de abortar.
+RETRYABLE = (
+    RateLimitError,      # 429 — cota estourada
+    APITimeoutError,     # demorou demais
+    APIConnectionError,  # rede
+    InternalServerError,  # 5xx — sobrecarga do provedor
+    NotFoundError,       # 404 — modelo removido do catálogo
+)
+
+
+class RouterError(RuntimeError):
+    """Todos os provedores falharam."""
+
+
+@dataclass
+class Attempt:
+    provider: str
+    model: str
+    error: str
+    latency: float
+
+
+@dataclass
+class Result:
+    content: str
+    provider: str
+    model: str
+    latency: float
+    total_tokens: int | None = None
+    attempts: list[Attempt] = field(default_factory=list)
+
+    def __str__(self) -> str:  # pragma: no cover - conveniência
+        return self.content
+
+
+class LLMRouter:
+    def __init__(
+        self,
+        profile: str | None = None,
+        order: Iterable[str] | None = None,
+        timeout: float | None = None,
+        env_file: str | Path | None = None,
+        on_event: Callable[[str], None] | None = None,
+    ) -> None:
+        load_dotenv(env_file or ROOT / ".env")
+
+        self.profile = profile or os.getenv("LLM_ROUTER_PROFILE") or DEFAULT_PROFILE
+        if self.profile not in PROFILES:
+            raise RouterError(
+                f"Perfil desconhecido: {self.profile!r}. "
+                f"Disponíveis: {', '.join(PROFILES)}"
+            )
+
+        # `order` restringe a quais provedores usar (útil para --status).
+        self.order = [p for p in (order or DEFAULT_ORDER) if p in PROVIDERS]
+        self.timeout = timeout or float(os.getenv("LLM_ROUTER_TIMEOUT") or 60.0)
+        self.on_event = on_event or (lambda msg: None)
+
+    # ---------------------------------------------------------------
+
+    def plan(self) -> list[tuple[Provider, str]]:
+        """A cascata efetiva: pares (provedor, modelo) com chave configurada."""
+        steps: list[tuple[Provider, str]] = []
+        for pkey, model in PROFILES[self.profile]:
+            if pkey not in self.order:
+                continue
+            provider = PROVIDERS[pkey]
+            if (os.getenv(provider.env) or "").strip():
+                steps.append((provider, model))
+        return steps
+
+    def available(self) -> list[Provider]:
+        """Provedores com chave preenchida, na ordem configurada."""
+        return [
+            PROVIDERS[k] for k in self.order
+            if (os.getenv(PROVIDERS[k].env) or "").strip()
+        ]
+
+    def _api_key(self, provider: Provider) -> str:
+        return (os.getenv(provider.env) or "").strip()
+
+    def _scrub(self, text: str, api_key: str) -> str:
+        """Nunca deixa a chave aparecer em log ou exceção."""
+        return text.replace(api_key, "***") if api_key else text
+
+    # ---------------------------------------------------------------
+
+    def ask(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> Result:
+        messages: list[dict] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        return self.chat(messages, max_tokens=max_tokens, temperature=temperature)
+
+    def chat(
+        self,
+        messages: list[dict],
+        *,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> Result:
+        attempts: list[Attempt] = []
+        steps = self.plan()
+
+        if not steps:
+            raise RouterError(
+                "Nenhum provedor com chave configurada para o perfil "
+                f"{self.profile!r}. Preencha o .env (veja .env.example)."
+            )
+
+        for provider, model in steps:
+            api_key = self._api_key(provider)
+            client = OpenAI(
+                base_url=provider.base_url,
+                api_key=api_key,
+                timeout=self.timeout,
+                max_retries=0,  # o retry é nosso, entre provedores
+            )
+
+            start = time.perf_counter()
+            try:
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+                elapsed = time.perf_counter() - start
+                content = (resp.choices[0].message.content or "").strip()
+
+                # Modelos de raciocínio podem gastar todo o orçamento de
+                # tokens pensando e devolver conteúdo vazio: isso é falha.
+                if not content:
+                    raise ValueError("resposta vazia (orçamento de tokens esgotado?)")
+
+                self.on_event(f"[OK] {provider.label} / {model} ({elapsed:.2f}s)")
+                return Result(
+                    content=content,
+                    provider=provider.label,
+                    model=model,
+                    latency=round(elapsed, 2),
+                    total_tokens=getattr(resp.usage, "total_tokens", None) if resp.usage else None,
+                    attempts=attempts,
+                )
+
+            except APIStatusError as exc:
+                # Cobre 402/403/410 e também 429/404 (subclasses) —
+                # em todos os casos seguimos para o próximo candidato.
+                elapsed = time.perf_counter() - start
+                status = getattr(exc, "status_code", "?")
+                msg = self._scrub(f"HTTP {status}: {exc}", api_key)[:200]
+                attempts.append(Attempt(provider.label, model, msg, round(elapsed, 2)))
+                self.on_event(f"[falhou] {provider.label} / {model}: {msg[:90]}")
+
+            except RETRYABLE as exc:
+                elapsed = time.perf_counter() - start
+                msg = self._scrub(f"{type(exc).__name__}: {exc}", api_key)[:200]
+                attempts.append(Attempt(provider.label, model, msg, round(elapsed, 2)))
+                self.on_event(f"[falhou] {provider.label} / {model}: {msg[:90]}")
+
+            except Exception as exc:  # inesperado — registra e segue
+                elapsed = time.perf_counter() - start
+                msg = self._scrub(f"{type(exc).__name__}: {exc}", api_key)[:200]
+                attempts.append(Attempt(provider.label, model, msg, round(elapsed, 2)))
+                self.on_event(f"[falhou] {provider.label} / {model}: {msg[:90]}")
+
+        detail = "\n".join(f"  - {a.provider}/{a.model}: {a.error}" for a in attempts)
+        raise RouterError(
+            f"Todos os provedores falharam (perfil {self.profile!r}):\n{detail}"
+        )

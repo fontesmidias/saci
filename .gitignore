@@ -1,0 +1,32 @@
+# ---------------------------------------------------------------
+# SEGREDOS — nunca commitar. Esta seção vem primeiro de propósito.
+# ---------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# Cache de descoberta de modelos (pode conter metadados da conta)
+providers.local.json
+
+# ---------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# ---------------------------------------------------------------
+# Editor / SO
+# ---------------------------------------------------------------
+.vscode/*
+!.vscode/settings.json
+.idea/
+Thumbs.db
+desktop.ini

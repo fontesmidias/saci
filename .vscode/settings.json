@@ -1,0 +1,12 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+
+  // Mantemos DESATIVADO de propósito: não queremos as chaves de API
+  // injetadas em todo terminal. O código carrega o .env explicitamente
+  // via python-dotenv, o que é mais previsível e seguro.
+  "python.envFile": "",
+
+  "files.exclude": {
+    "**/__pycache__": true
+  }
+}
