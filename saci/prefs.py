@@ -16,10 +16,8 @@ from __future__ import annotations
 
 import json
 import threading
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-PREFS_PATH = ROOT / "prefs.json"
+from . import paths
 
 _lock = threading.Lock()
 
@@ -32,7 +30,7 @@ DEFAULTS = {
 def load() -> dict:
     """Lê as preferências. Arquivo ausente ou corrompido cai no padrão."""
     try:
-        data = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
+        data = json.loads(paths.prefs_path().read_text(encoding="utf-8"))
         if isinstance(data, dict):
             return {**DEFAULTS, **data}
     except Exception:
@@ -46,7 +44,7 @@ def save(**changes) -> dict:
         current = load()
         current.update(changes)
         try:
-            PREFS_PATH.write_text(
+            paths.prefs_path().write_text(
                 json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8"
             )
         except Exception:

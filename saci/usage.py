@@ -31,8 +31,9 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "usage.db"
+from . import paths
+
+ROOT = paths.REPO_ROOT  # mantido por compatibilidade; prefira paths.data_dir()
 
 
 def user_tz() -> timezone:
@@ -40,7 +41,7 @@ def user_tz() -> timezone:
     import os
 
     from dotenv import load_dotenv
-    load_dotenv(ROOT / ".env")
+    load_dotenv(paths.env_path())
     try:
         hours = float(os.getenv("LLM_ROUTER_TZ") or -3)
     except ValueError:
@@ -171,7 +172,7 @@ CREATE TABLE IF NOT EXISTS quota (
 
 @contextmanager
 def _db():
-    conn = sqlite3.connect(DB_PATH, timeout=10.0)
+    conn = sqlite3.connect(paths.db_path(), timeout=10.0)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -430,7 +431,7 @@ def report() -> list[dict]:
 
     from .providers import PROVIDERS as _P
 
-    _load(ROOT / ".env")
+    _load(paths.env_path())
 
     def _active(key: str) -> bool:
         prov = _P.get(key)

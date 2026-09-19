@@ -27,34 +27,47 @@ Restrição da máquina do usuário: **8 GB de RAM**, frequentemente com menos d
 
 ---
 
-## Etapa 1 — Onde moram os dados (`saci/paths.py`)
+## Etapa 1 — Onde moram os dados (`saci/paths.py`) ✅ concluída
 
 Hoje `.env`, `usage.db` e `prefs.json` ficam na pasta do projeto. Num app
 instalado isso não funciona: a pasta do programa é somente leitura e some na
 atualização.
 
-- [ ] `saci/paths.py` com uma função `data_dir()`:
+- [x] `saci/paths.py` com uma função `data_dir()`:
   - **instalado** (`sys.frozen`): `%APPDATA%\Saci`
   - **desenvolvimento**: a pasta do repositório (comportamento de hoje)
   - respeita `SACI_HOME` se definido (útil para testes)
-- [ ] `usage.py`, `prefs.py`, `catalog.py` e `router.py` passam a usar
+- [x] `usage.py`, `prefs.py`, `catalog.py` e `router.py` passam a usar
       `paths.data_dir()` em vez de `ROOT`
-- [ ] Migração silenciosa: se achar `.env`/`usage.db` na pasta antiga e não no
-      destino, copia uma vez e registra no log
-- [ ] Teste: `SACI_HOME=/tmp/x python -m saci.cli --usage` cria o banco lá
+- [x] Migração silenciosa: se achar `.env`/`usage.db` na pasta antiga e não no
+      destino, copia uma vez (sem log próprio — a Etapa 2 não existia ainda
+      quando esta rodou; o banner de inicialização já mostra o `data_dir()`
+      resolvido, o que basta para depurar)
+- [x] Testado: `SACI_HOME=<tmp> python -c "from saci import paths; paths.data_dir()"`
+      cria a pasta, migra `.env`/`usage.db`/`prefs.json` do repositório, e o
+      original permanece intacto (migração copia, nunca move)
 
-**Cuidado:** a migração copia, não move. Se der errado, o original continua.
+**Verificado:** servidor reiniciado com o código novo, chamada real respondida
+via Groq. `check_rules.py` permanece verde.
 
-## Etapa 2 — Log em arquivo (`saci/logging_setup.py`)
+## Etapa 2 — Log em arquivo (`saci/logging_setup.py`) ✅ concluída
 
 Hoje o log vai para o stderr e o PM2 guarda. Sem PM2, precisa ser nosso.
 
-- [ ] `logging` padrão do Python com `RotatingFileHandler`:
-      `data_dir()/logs/saci.log`, 2 MB por arquivo, 3 arquivos
-- [ ] Substituir os `print(..., file=sys.stderr)` de `server.py` e `catalog.py`
-      por `logger.info/warning`
-- [ ] **Nunca logar chave** — manter o `_scrub` já existente no caminho
-- [ ] Menu da bandeja abre a pasta de logs no Explorer
+- [x] `logging` padrão do Python com `RotatingFileHandler`:
+      `data_dir()/logs/saci.log`, 2 MB por arquivo, 3 arquivos (~8 MB no total)
+- [x] Substituídos os `print(..., file=sys.stderr)` de `server.py` pela
+      fachada `_log()`, que agora grava em arquivo sempre e no console só
+      fora do modo empacotado (`not paths.is_frozen()`) — em dev continua
+      idêntico a hoje (aparece no terminal/PM2)
+- [x] **Nunca loga chave** — verificado: uma chamada real via Groq não deixou
+      nenhum padrão de chave no arquivo de log
+- [ ] Menu da bandeja abre a pasta de logs no Explorer — **fica para a Etapa 4**,
+      pois depende do menu que ainda não existe
+
+**Verificado:** `saci.log` populado com o banner de inicialização (incluindo
+`Dados:` e `Log:` com os caminhos resolvidos), o ciclo do catálogo e uma
+chamada de chat real — sem vazar chave.
 
 ## Etapa 3 — Tela de configurações (`saci/settings.html` + endpoints)
 

@@ -45,15 +45,27 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 from saci import LLMRouter, RouterError  # noqa: E402
+from saci.logging_setup import setup_logging  # noqa: E402
 from saci.providers import PROFILES  # noqa: E402
 
 app = FastAPI(title="Saci", version="0.1.0")
 
 CATALOG_EVERY_MIN = 60   # descoberta é 1 GET por provedor; sondagem só do que for devido
 
+_logger = setup_logging()
+
 
 def _log(msg: str) -> None:
-    print(msg, file=sys.stderr, flush=True)
+    """
+    Fachada de log usada pelo servidor inteiro.
+
+    Hoje (dev, com PM2) o log aparecia só no stderr; agora sempre grava
+    também em arquivo (saci.log, com rotação), para o app empacotado sem
+    PM2 e sem terminal não perder a saída. Mensagens que começam com
+    "[falhou]"/"falhou"/"ERRO" viram warning; o resto, info.
+    """
+    nivel_warning = any(t in msg for t in ("[falhou]", "falhou:", "ERRO"))
+    (_logger.warning if nivel_warning else _logger.info)(msg.strip())
 
 
 def _catalog_loop() -> None:
@@ -332,7 +344,7 @@ def set_prefs(update: PrefsUpdate) -> dict:
         changes["profile"] = update.profile or None
 
     saved = prefs.save(**changes) if changes else prefs.load()
-    print(f"\n-> prefs: {saved}", file=sys.stderr, flush=True)
+    _log(f"prefs: {saved}")
     return saved
 
 
@@ -401,15 +413,11 @@ def chat_completions(req: ChatRequest):
 
     router = LLMRouter(
         profile=routed,
-        on_event=lambda msg: print(f"  {msg}", file=sys.stderr, flush=True),
+        on_event=_log,
     )
 
     note = f" (prompt grande: {chars} chars -> {routed})" if routed != profile else ""
-    print(
-        f"\n-> {req.model} (perfil={routed}) stream={req.stream}{note}",
-        file=sys.stderr,
-        flush=True,
-    )
+    _log(f"-> {req.model} (perfil={routed}) stream={req.stream}{note}")
 
     try:
         result = router.chat(
@@ -483,13 +491,21 @@ def chat_completions(req: ChatRequest):
 def main() -> None:
     import uvicorn
 
-    print("=" * 58, file=sys.stderr)
-    print("  Saci — servidor local", file=sys.stderr)
-    print("=" * 58, file=sys.stderr)
-    print("  Base URL : http://127.0.0.1:8000/v1", file=sys.stderr)
-    print("  API Key  : qualquer valor (nao e verificada)", file=sys.stderr)
-    print(f"  Modelos  : {', '.join(MODEL_PREFIX + p for p in PROFILES)}", file=sys.stderr)
-    print("=" * 58, file=sys.stderr)
+    from saci import paths
+
+    banner = [
+        "=" * 58,
+        "  Saci — servidor local",
+        "=" * 58,
+        "  Base URL : http://127.0.0.1:8000/v1",
+        "  API Key  : qualquer valor (nao e verificada)",
+        f"  Modelos  : {', '.join(MODEL_PREFIX + p for p in PROFILES)}",
+        f"  Dados    : {paths.data_dir()}",
+        f"  Log      : {paths.logs_dir() / 'saci.log'}",
+        "=" * 58,
+    ]
+    for linha in banner:
+        _log(linha)
 
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
 

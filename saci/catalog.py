@@ -44,10 +44,10 @@ from typing import Callable
 import httpx
 from dotenv import load_dotenv
 
+from . import paths
 from .providers import PROVIDERS, Provider
 
-ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "usage.db"  # mesma base do consumo: uma só para fazer backup
+ROOT = paths.REPO_ROOT  # mantido por compatibilidade; prefira paths.data_dir()
 
 _lock = threading.Lock()
 _refresh_lock = threading.Lock()
@@ -118,7 +118,7 @@ def _iso(dt: datetime | None = None) -> str:
 
 @contextmanager
 def _db():
-    conn = sqlite3.connect(DB_PATH, timeout=10.0)
+    conn = sqlite3.connect(paths.db_path(), timeout=10.0)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -138,7 +138,7 @@ def init() -> None:
 
 def _api_key(provider: Provider) -> str:
     import os
-    load_dotenv(ROOT / ".env")
+    load_dotenv(paths.env_path())
     if not provider.env:
         return "unused"
     return (os.getenv(provider.env) or "").strip()
@@ -405,7 +405,7 @@ def refresh_all(
 ) -> list[dict]:
     """Roda o ciclo em todos os provedores. Serializado: um refresh por vez."""
     import os
-    load_dotenv(ROOT / ".env")
+    load_dotenv(paths.env_path())
     if not _refresh_lock.acquire(blocking=False):
         (on_event or (lambda m: None))("[catálogo] refresh já em andamento")
         return []

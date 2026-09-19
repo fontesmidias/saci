@@ -33,11 +33,11 @@ from openai import (
     RateLimitError,
 )
 
-from . import catalog, prefs
+from . import catalog, paths, prefs
 from . import usage as usage_db
 from .providers import DEFAULT_ORDER, DEFAULT_PROFILE, PROFILES, PROVIDERS, Provider
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = paths.REPO_ROOT  # mantido por compatibilidade; prefira paths.data_dir()
 
 # Erros que significam "este modelo/provedor não vai servir AGORA" —
 # vale a pena tentar o próximo em vez de abortar.
@@ -86,7 +86,7 @@ class LLMRouter:
         skip_exhausted: bool = True,
         honor_pin: bool = True,
     ) -> None:
-        load_dotenv(env_file or ROOT / ".env")
+        load_dotenv(env_file or paths.env_path())
         self.skip_exhausted = skip_exhausted
         self.honor_pin = honor_pin
 
