@@ -33,6 +33,7 @@ from openai import (
     RateLimitError,
 )
 
+from . import usage as usage_db
 from .providers import DEFAULT_ORDER, DEFAULT_PROFILE, PROFILES, PROVIDERS, Provider
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -81,8 +82,10 @@ class LLMRouter:
         timeout: float | None = None,
         env_file: str | Path | None = None,
         on_event: Callable[[str], None] | None = None,
+        skip_exhausted: bool = True,
     ) -> None:
         load_dotenv(env_file or ROOT / ".env")
+        self.skip_exhausted = skip_exhausted
 
         self.profile = profile or os.getenv("LLM_ROUTER_PROFILE") or DEFAULT_PROFILE
         if self.profile not in PROFILES:
@@ -99,15 +102,33 @@ class LLMRouter:
     # ---------------------------------------------------------------
 
     def plan(self) -> list[tuple[Provider, str]]:
-        """A cascata efetiva: pares (provedor, modelo) com chave configurada."""
-        steps: list[tuple[Provider, str]] = []
+        """
+        A cascata efetiva: pares (provedor, modelo) com chave configurada.
+
+        Provedores sem cota vão para o FIM da fila em vez de serem
+        removidos — se todos estiverem no limite, ainda vale tentar (a
+        cota pode ter resetado desde a última leitura).
+        """
+        ready: list[tuple[Provider, str]] = []
+        exhausted: list[tuple[Provider, str]] = []
+
         for pkey, model in PROFILES[self.profile]:
             if pkey not in self.order:
                 continue
             provider = PROVIDERS[pkey]
-            if (os.getenv(provider.env) or "").strip():
-                steps.append((provider, model))
-        return steps
+            if not (os.getenv(provider.env) or "").strip():
+                continue
+
+            if self.skip_exhausted and usage_db.is_exhausted(pkey):
+                exhausted.append((provider, model))
+            else:
+                ready.append((provider, model))
+
+        if exhausted and ready:
+            names = {p.label for p, _ in exhausted}
+            self.on_event(f"[cota] adiando: {', '.join(sorted(names))}")
+
+        return ready + exhausted
 
     def available(self) -> list[Provider]:
         """Provedores com chave preenchida, na ordem configurada."""
@@ -122,6 +143,30 @@ class LLMRouter:
     def _scrub(self, text: str, api_key: str) -> str:
         """Nunca deixa a chave aparecer em log ou exceção."""
         return text.replace(api_key, "***") if api_key else text
+
+    def _log(
+        self,
+        provider: Provider,
+        model: str,
+        *,
+        ok: bool,
+        tokens: int = 0,
+        latency: float | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Grava a chamada no histórico. Falha aqui nunca quebra a resposta."""
+        try:
+            usage_db.record_call(
+                provider.key,
+                model,
+                ok=ok,
+                tokens=tokens,
+                latency=latency,
+                profile=self.profile,
+                error=error,
+            )
+        except Exception:
+            pass
 
     # ---------------------------------------------------------------
 
@@ -166,12 +211,20 @@ class LLMRouter:
 
             start = time.perf_counter()
             try:
-                resp = client.chat.completions.create(
+                # with_raw_response dá acesso aos headers, onde Groq e
+                # Mistral publicam a cota restante em tempo real.
+                raw = client.chat.completions.with_raw_response.create(
                     model=model,
                     messages=messages,
                     max_tokens=max_tokens,
                     temperature=temperature,
                 )
+                try:
+                    usage_db.record_quota_headers(provider.key, raw.headers)
+                except Exception:
+                    pass  # contabilidade nunca derruba a chamada
+
+                resp = raw.parse()
                 elapsed = time.perf_counter() - start
                 content = (resp.choices[0].message.content or "").strip()
 
@@ -180,13 +233,16 @@ class LLMRouter:
                 if not content:
                     raise ValueError("resposta vazia (orçamento de tokens esgotado?)")
 
+                tokens = getattr(resp.usage, "total_tokens", None) if resp.usage else None
+                self._log(provider, model, ok=True, tokens=tokens or 0, latency=elapsed)
+
                 self.on_event(f"[OK] {provider.label} / {model} ({elapsed:.2f}s)")
                 return Result(
                     content=content,
                     provider=provider.label,
                     model=model,
                     latency=round(elapsed, 2),
-                    total_tokens=getattr(resp.usage, "total_tokens", None) if resp.usage else None,
+                    total_tokens=tokens,
                     attempts=attempts,
                 )
 
@@ -197,18 +253,21 @@ class LLMRouter:
                 status = getattr(exc, "status_code", "?")
                 msg = self._scrub(f"HTTP {status}: {exc}", api_key)[:200]
                 attempts.append(Attempt(provider.label, model, msg, round(elapsed, 2)))
+                self._log(provider, model, ok=False, latency=elapsed, error=msg)
                 self.on_event(f"[falhou] {provider.label} / {model}: {msg[:90]}")
 
             except RETRYABLE as exc:
                 elapsed = time.perf_counter() - start
                 msg = self._scrub(f"{type(exc).__name__}: {exc}", api_key)[:200]
                 attempts.append(Attempt(provider.label, model, msg, round(elapsed, 2)))
+                self._log(provider, model, ok=False, latency=elapsed, error=msg)
                 self.on_event(f"[falhou] {provider.label} / {model}: {msg[:90]}")
 
             except Exception as exc:  # inesperado — registra e segue
                 elapsed = time.perf_counter() - start
                 msg = self._scrub(f"{type(exc).__name__}: {exc}", api_key)[:200]
                 attempts.append(Attempt(provider.label, model, msg, round(elapsed, 2)))
+                self._log(provider, model, ok=False, latency=elapsed, error=msg)
                 self.on_event(f"[falhou] {provider.label} / {model}: {msg[:90]}")
 
         detail = "\n".join(f"  - {a.provider}/{a.model}: {a.error}" for a in attempts)

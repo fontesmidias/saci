@@ -40,6 +40,61 @@ SYSTEM_PROMPTS = {
 }
 
 
+def cmd_usage() -> int:
+    """Mostra consumo e cota restante por provedor."""
+    from llmrouter import usage as usage_db
+
+    rows = usage_db.report()
+    print("CONSUMO DE HOJE (UTC)\n")
+    print(f"  {'provedor':11} {'chamadas':>9} {'falhas':>7} {'tokens':>9} {'latencia':>9}  fonte")
+    print(f"  {'-'*11} {'-'*9} {'-'*7} {'-'*9} {'-'*9}  {'-'*8}")
+
+    any_use = False
+    for r in rows:
+        if r["calls_today"] or r["failed_today"]:
+            any_use = True
+        lat = f"{r['avg_latency']}s" if r["avg_latency"] else "-"
+        print(
+            f"  {r['provider']:11} {r['calls_today']:>9} {r['failed_today']:>7} "
+            f"{r['tokens_today']:>9} {lat:>9}  {r['source']}"
+        )
+
+    if not any_use:
+        print("\n  (nenhuma chamada registrada hoje)")
+
+    print("\n\nCOTA RESTANTE\n")
+    for r in rows:
+        name = r["provider"]
+        if r["remaining_requests"] is not None:
+            # Dado oficial do provedor.
+            used = (r["limit_requests"] or 0) - r["remaining_requests"]
+            pct = 100 * used / r["limit_requests"] if r["limit_requests"] else 0
+            bar = _bar(pct)
+            reset = f" | reset em {r['reset_requests']}" if r["reset_requests"] else ""
+            print(f"  {name:11} {bar} {used}/{r['limit_requests']} req  [oficial]{reset}")
+            if r["remaining_tokens"] is not None and r["limit_tokens"]:
+                tused = r["limit_tokens"] - r["remaining_tokens"]
+                print(f"  {'':11} {_bar(100*tused/r['limit_tokens'])} "
+                      f"{tused}/{r['limit_tokens']} tokens")
+        elif r["rpd_limit"]:
+            # Estimativa nossa, por contagem local.
+            pct = r["rpd_used_pct"] or 0
+            print(f"  {name:11} {_bar(pct)} {r['calls_today']}/{r['rpd_limit']} req/dia  [estimado]")
+        else:
+            print(f"  {name:11} (sem limite conhecido)")
+
+    print("\n  [oficial]  = lido dos headers do provedor")
+    print("  [estimado] = nossa contagem local (provedor nao informa)")
+    return 0
+
+
+def _bar(pct: float, width: int = 20) -> str:
+    """Barra de progresso em texto."""
+    pct = max(0.0, min(100.0, pct))
+    filled = int(width * pct / 100)
+    return f"[{'#' * filled}{'.' * (width - filled)}] {pct:5.1f}%"
+
+
 def cmd_profiles() -> int:
     print("Perfis disponíveis:\n")
     for name, steps in PROFILES.items():
@@ -96,8 +151,11 @@ def main() -> int:
     parser.add_argument("-v", "--verbose", action="store_true", help="mostra a cascata")
     parser.add_argument("--status", action="store_true", help="testa todos os provedores")
     parser.add_argument("--profiles", action="store_true", help="lista os perfis")
+    parser.add_argument("--usage", action="store_true", help="consumo e cota por provedor")
     args = parser.parse_args()
 
+    if args.usage:
+        return cmd_usage()
     if args.profiles:
         return cmd_profiles()
     if args.status:

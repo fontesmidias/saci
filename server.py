@@ -132,6 +132,18 @@ def health() -> dict:
     return {"status": "ok", "profiles": list(PROFILES)}
 
 
+@app.get("/usage")
+def usage_report() -> dict:
+    """Consumo e cota por provedor. Abra no navegador: http://127.0.0.1:8000/usage"""
+    from llmrouter import usage as usage_db
+
+    rows = usage_db.report()
+    return {
+        "providers": rows,
+        "exhausted": [r["provider"] for r in rows if usage_db.is_exhausted(r["provider"])],
+    }
+
+
 @app.post("/v1/chat/completions")
 def chat_completions(req: ChatRequest):
     profile = resolve_profile(req.model)

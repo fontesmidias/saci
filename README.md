@@ -63,6 +63,7 @@ Cline, Continue, Aider e afins.
 ```powershell
 llm-on       # liga (fica em segundo plano via PM2)
 llm-status   # mostra estado + testa provedores
+llm-usage    # consumo e cota restante por provedor
 llm-logs     # logs ao vivo (Ctrl+C sai)
 llm-off      # desliga
 ```
@@ -101,6 +102,35 @@ print(r.content)
 print(r.provider, r.model, r.latency)   # quem atendeu
 print(r.attempts)                        # quem falhou antes
 ```
+
+## Monitoramento de consumo
+
+```powershell
+llm-usage
+```
+
+Mostra, por provedor, quantas chamadas e tokens foram gastos hoje e quanto
+resta da cota — mais o endpoint `http://127.0.0.1:8000/usage` (JSON) enquanto
+o servidor estiver no ar.
+
+Há duas fontes de dado, e a saída diz qual está sendo usada:
+
+| Provedor | Fonte | O que sabemos |
+|---|---|---|
+| Groq | `[oficial]` | headers: req e tokens restantes + quando reseta |
+| Mistral | `[oficial]` | headers: req e tokens restantes por minuto |
+| OpenRouter | endpoint | `/v1/key` informa uso acumulado |
+| Google | `[estimado]` | não informa nada — contamos localmente |
+| NVIDIA | `[estimado]` | não informa nada — contamos localmente |
+
+### Troca automática ao esgotar
+
+Quando um provedor passa de 95% da cota, ele vai para o **fim** da fila em
+vez de ser tentado primeiro. Não é removido: se a cota tiver resetado, ele
+ainda é tentado como último recurso.
+
+O histórico fica em `usage.db` (SQLite local, fora do git), então sobrevive
+a reinícios do servidor.
 
 ## Manutenção
 
