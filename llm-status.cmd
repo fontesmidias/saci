@@ -1,6 +1,8 @@
 @echo off
-REM Mostra o estado do servidor e testa os provedores.
+REM Estado do servidor, dos provedores e do consumo.
 cd /d "%~dp0"
-pm2 list
+echo === PROCESSO ===
+call pm2 list
 echo.
-"%~dp0.venv\Scripts\python.exe" "%~dp0ask.py" --status
+echo === CONSUMO ===
+"%~dp0.venv\Scripts\python.exe" "%~dp0ask.py" --usage

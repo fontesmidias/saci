@@ -1,7 +1,10 @@
 @echo off
-REM Liga o servidor do LLM Router (fica rodando em segundo plano).
+REM Liga o servidor do LLM Router (segundo plano, via PM2).
 cd /d "%~dp0"
-pm2 start ecosystem.config.js
+REM Se o daemon do PM2 caiu (reboot/logoff), restaura o que estava salvo.
+call pm2 resurrect >nul 2>&1
+call pm2 start ecosystem.config.js
+call pm2 save >nul 2>&1
 echo.
-echo Servidor no ar em http://127.0.0.1:8000/v1
-echo Para desligar:  llm-off
+echo Servidor no ar: http://127.0.0.1:8000/v1
+echo Painel: llm-panel     Desligar: llm-off
