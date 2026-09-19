@@ -102,6 +102,16 @@ PROFILES: dict[str, list[tuple[str, str]]] = {
         ("groq", "groq/compound"),
         ("openrouter", "z-ai/glm-5.2:free"),
     ],
+    # Para agentes (Cline, Continue, Aider): prompts gigantes com system
+    # prompt + arquivos + histórico. O Groq rejeita com HTTP 413
+    # ("request too large"), então começamos por quem aguenta o volume.
+    "agent": [
+        ("mistral", "codestral-latest"),
+        ("google", "gemini-3.6-flash"),
+        ("google", "gemini-3.8-flash"),
+        ("nvidia", "z-ai/glm-5.3"),
+        ("groq", "openai/gpt-oss-120b"),
+    ],
     # Perguntas rápidas do dia a dia. Latência acima de tudo.
     "fast": [
         ("groq", "openai/gpt-oss-20b"),

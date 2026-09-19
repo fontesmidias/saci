@@ -50,6 +50,7 @@ type arquivo.py | py ask.py -p code "adicione testes:"
 |---|---|---|
 | `code` | gerar/refatorar código | Groq `gpt-oss-120b` (~2s) |
 | `plan` | arquitetura, decisões, quebra de tarefas | Groq `gpt-oss-120b` (~5s) |
+| `agent` | Cline/Continue — prompts grandes | Mistral `codestral-latest` |
 | `fast` | perguntas rápidas | Groq `gpt-oss-20b` (~1s) |
 | `long` | textos longos, contexto grande | Google `gemini-3.6-flash` |
 | `pt` | português corporativo, documentos | Google `gemini-3.6-flash` |
@@ -75,10 +76,15 @@ reinicia sozinho se cair.
 |---|---|
 | Base URL | `http://127.0.0.1:8000/v1` |
 | API Key | qualquer coisa (não é verificada) |
-| Model | `router-code`, `router-plan`, `router-fast`, `router-long` ou `router-pt` |
+| Model | `router-code`, `router-plan`, `router-agent`, `router-fast`, `router-long` ou `router-pt` |
 
 Cada perfil aparece como um "modelo" na extensão. A resposta traz um campo
 extra `x_router` dizendo qual provedor de fato atendeu e em quanto tempo.
+
+**Roteamento por tamanho:** prompts acima de ~24k caracteres são promovidos
+automaticamente para o perfil `agent`. O Groq rejeita requisições grandes
+com HTTP 413, então pular direto para quem aguenta o volume evita gastar
+uma tentativa fadada ao erro. Isso vale mesmo se o Model ID for outro.
 
 > O servidor escuta só em `127.0.0.1` e **não exige autenticação**.
 > Não o exponha na rede sem antes adicionar uma.

@@ -8,6 +8,7 @@ Aider, etc.). Cada PERFIL vira um "modelo":
 
     router-code   -> perfil code   (gerar/refatorar codigo)
     router-plan   -> perfil plan   (arquitetura, decisoes)
+    router-agent  -> perfil agent  (Cline/Continue: prompts grandes)
     router-fast   -> perfil fast   (perguntas rapidas)
     router-long   -> perfil long   (contexto grande)
     router-pt     -> perfil pt     (portugues corporativo)
@@ -63,6 +64,12 @@ class ChatRequest(BaseModel):
     stream: bool = False
 
 
+# Acima deste tamanho (em caracteres) o Groq devolve HTTP 413, então
+# trocamos para o perfil "agent", que começa por provedores que aguentam
+# prompts grandes. ~24k chars ≈ 6k tokens, com folga sobre o limite real.
+LARGE_PROMPT_CHARS = 24_000
+
+
 def resolve_profile(model: str) -> str:
     """Converte o nome do 'modelo' pedido no perfil correspondente."""
     name = model[len(MODEL_PREFIX):] if model.startswith(MODEL_PREFIX) else model
@@ -70,6 +77,20 @@ def resolve_profile(model: str) -> str:
         return name
     # Nome desconhecido (a extensão pode mandar "gpt-4o") — usa um padrão útil.
     return "code"
+
+
+def adjust_for_size(profile: str, messages: list[dict]) -> str:
+    """
+    Promove para o perfil 'agent' quando o prompt é grande demais.
+
+    Extensões como o Cline mandam system prompt + arquivos + histórico, o
+    que estoura o limite por requisição do Groq. Sem isso, toda chamada
+    gastaria uma tentativa fadada ao 413 antes de cair para o próximo.
+    """
+    if profile in ("agent", "long"):
+        return profile
+    size = sum(len(m.get("content") or "") for m in messages)
+    return "agent" if size > LARGE_PROMPT_CHARS else profile
 
 
 def flatten(content: Any) -> str:
@@ -124,12 +145,20 @@ def chat_completions(req: ChatRequest):
 
     max_tokens = req.max_completion_tokens or req.max_tokens or 4096
 
+    chars = sum(len(m.get("content") or "") for m in messages)
+    routed = adjust_for_size(profile, messages)
+
     router = LLMRouter(
-        profile=profile,
+        profile=routed,
         on_event=lambda msg: print(f"  {msg}", file=sys.stderr, flush=True),
     )
 
-    print(f"\n-> {req.model} (perfil={profile}) stream={req.stream}", file=sys.stderr, flush=True)
+    note = f" (prompt grande: {chars} chars -> {routed})" if routed != profile else ""
+    print(
+        f"\n-> {req.model} (perfil={routed}) stream={req.stream}{note}",
+        file=sys.stderr,
+        flush=True,
+    )
 
     try:
         result = router.chat(
@@ -140,7 +169,7 @@ def chat_completions(req: ChatRequest):
 
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
-    model_label = f"{MODEL_PREFIX}{profile}"
+    model_label = f"{MODEL_PREFIX}{routed}"
 
     if not req.stream:
         return {
