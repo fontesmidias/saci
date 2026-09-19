@@ -36,14 +36,50 @@ DB_PATH = ROOT / "usage.db"
 
 _lock = threading.Lock()
 
-# Limites do free tier. 'source' diz se o número vem do provedor ou é nosso.
+# Limites do free tier.
+#   source     : de onde vem o número ('headers'/'endpoint' = provedor, 'local' = nosso)
+#   reset_tz   : fuso em que a cota diária vira (offset em horas sobre UTC)
+#                Groq/OpenRouter viram à meia-noite UTC; o Google usa o
+#                horário do Pacífico (UTC-7/-8).
+#   period     : 'day' ou 'month' — a NVIDIA dá créditos mensais.
 KNOWN_LIMITS: dict[str, dict] = {
-    "groq": {"rpd": 1000, "rpm": 30, "source": "headers"},
-    "google": {"rpd": 1500, "rpm": 15, "source": "local"},
-    "mistral": {"rpm": 188, "source": "headers"},
-    "nvidia": {"rpd": 1000, "rpm": 40, "source": "local"},
-    "openrouter": {"rpd": 200, "rpm": 20, "source": "endpoint"},
+    "groq": {"rpd": 1000, "rpm": 30, "source": "headers", "reset_tz": 0, "period": "day"},
+    "google": {"rpd": 1500, "rpm": 15, "source": "local", "reset_tz": -7, "period": "day"},
+    "mistral": {"rpm": 188, "source": "headers", "reset_tz": 0, "period": "day"},
+    "nvidia": {"rpd": 1000, "rpm": 40, "source": "local", "reset_tz": 0, "period": "month"},
+    "openrouter": {"rpd": 200, "rpm": 20, "source": "endpoint", "reset_tz": 0, "period": "day"},
 }
+
+
+def daily_reset_in(provider: str) -> float | None:
+    """
+    Segundos até a cota diária (ou mensal) do provedor virar.
+
+    É esta a informação que importa no dia a dia: as janelas de 1 minuto
+    dos headers resetam antes de você terminar de ler.
+    """
+    limits = KNOWN_LIMITS.get(provider)
+    if not limits:
+        return None
+
+    now = datetime.now(timezone.utc)
+    offset = timedelta(hours=limits.get("reset_tz", 0))
+    local = now + offset  # hora local do provedor
+
+    if limits.get("period") == "month":
+        # Primeiro dia do mês seguinte, no fuso do provedor.
+        if local.month == 12:
+            nxt = local.replace(year=local.year + 1, month=1, day=1,
+                                hour=0, minute=0, second=0, microsecond=0)
+        else:
+            nxt = local.replace(month=local.month + 1, day=1,
+                                hour=0, minute=0, second=0, microsecond=0)
+    else:
+        nxt = (local + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+
+    return round((nxt - local).total_seconds(), 0)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS calls (
@@ -362,6 +398,9 @@ def report() -> list[dict]:
             "tokens_today": pu.get("tokens", 0),
             "rpd_limit": rpd,
             "rpd_used_pct": round(100 * used / rpd, 1) if rpd else None,
+            # A cota que de fato acaba, e quando ela volta.
+            "period": limits.get("period", "day"),
+            "daily_reset_in": daily_reset_in(provider),
             "exhausted": is_exhausted(provider),
             "models": models,
         })

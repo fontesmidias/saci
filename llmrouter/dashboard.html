@@ -6,184 +6,245 @@
 <title>LLM Router</title>
 <style>
   :root {
-    --bg: #0d1117; --panel: #161b22; --border: #30363d;
-    --text: #e6edf3; --dim: #8b949e;
-    --ok: #3fb950; --warn: #d29922; --bad: #f85149; --accent: #58a6ff;
+    --bg:#0d1117; --panel:#161b22; --border:#30363d; --hover:#1f2630;
+    --text:#e6edf3; --dim:#8b949e;
+    --ok:#3fb950; --warn:#d29922; --bad:#f85149; --accent:#58a6ff;
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
-      --bg: #ffffff; --panel: #f6f8fa; --border: #d0d7de;
-      --text: #1f2328; --dim: #656d76;
+      --bg:#fff; --panel:#f6f8fa; --border:#d0d7de; --hover:#eaeef2;
+      --text:#1f2328; --dim:#656d76;
     }
   }
-  * { box-sizing: border-box; }
+  * { box-sizing:border-box; }
   body {
-    margin: 0; padding: 16px; background: var(--bg); color: var(--text);
-    font: 13px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace;
+    margin:0; padding:14px; background:var(--bg); color:var(--text);
+    font:13px/1.45 ui-monospace,"Cascadia Code",Consolas,monospace;
   }
-  h1 { font-size: 15px; margin: 0 0 2px; font-weight: 600; }
-  .sub { color: var(--dim); font-size: 11px; margin-bottom: 14px; }
-  .card {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: 6px; padding: 12px; margin-bottom: 10px;
-  }
-  .phead { display: flex; justify-content: space-between; align-items: baseline;
-           margin-bottom: 10px; gap: 8px; flex-wrap: wrap; }
-  .pname { font-weight: 600; font-size: 14px; }
-  .tag { font-size: 10px; padding: 1px 6px; border-radius: 9px;
-         border: 1px solid var(--border); color: var(--dim); }
-  .tag.official { color: var(--ok); border-color: var(--ok); }
-  .tag.est { color: var(--warn); border-color: var(--warn); }
-  .tag.out { color: var(--bad); border-color: var(--bad); }
-  .model { margin: 9px 0; padding-left: 8px; border-left: 2px solid var(--border); }
-  .model.dead { border-left-color: var(--bad); opacity: .65; }
-  .mname { font-size: 12px; margin-bottom: 4px; display: flex;
-           justify-content: space-between; gap: 8px; }
-  .muted { color: var(--dim); font-size: 11px; }
-  .row { display: flex; align-items: center; gap: 7px; margin: 3px 0; font-size: 11px; }
-  .label { color: var(--dim); width: 42px; flex-shrink: 0; }
-  .bar { flex: 1; height: 7px; background: var(--border);
-         border-radius: 4px; overflow: hidden; min-width: 60px; }
-  .fill { height: 100%; background: var(--ok); transition: width .4s, background .4s; }
-  .fill.warn { background: var(--warn); }
-  .fill.bad { background: var(--bad); }
-  .val { width: 108px; text-align: right; color: var(--dim); flex-shrink: 0; }
-  .cd { color: var(--accent); width: 60px; text-align: right; flex-shrink: 0; }
-  .cd.soon { color: var(--ok); }
-  .foot { display: flex; justify-content: space-between; color: var(--dim);
-          font-size: 11px; margin-top: 12px; flex-wrap: wrap; gap: 8px; }
-  .empty { color: var(--dim); font-style: italic; font-size: 11px; }
-  @media (max-width: 420px) { .val { width: 86px; } }
+  header { display:flex; justify-content:space-between; align-items:baseline;
+           gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  h1 { font-size:14px; margin:0; font-weight:600; }
+  .sub { color:var(--dim); font-size:11px; }
+
+  /* Perfil ativo — a troca manual que o usuario pediu */
+  .control { background:var(--panel); border:1px solid var(--border);
+             border-radius:6px; padding:10px 12px; margin-bottom:12px; }
+  .control label { color:var(--dim); font-size:11px; display:block; margin-bottom:6px; }
+  .chips { display:flex; gap:5px; flex-wrap:wrap; }
+  .chip { padding:3px 10px; border-radius:12px; cursor:pointer; font-size:11px;
+          border:1px solid var(--border); background:transparent; color:var(--text);
+          font-family:inherit; transition:.15s; }
+  .chip:hover { background:var(--hover); }
+  .chip.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .pinbar { margin-top:8px; font-size:11px; color:var(--dim);
+            display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .unpin { color:var(--accent); cursor:pointer; text-decoration:underline; background:none;
+           border:none; font:inherit; padding:0; }
+
+  /* Cartao de provedor */
+  .card { background:var(--panel); border:1px solid var(--border);
+          border-radius:6px; padding:11px 12px; margin-bottom:9px; }
+  .card.out { border-color:var(--bad); }
+  .top { display:flex; justify-content:space-between; align-items:baseline;
+         gap:8px; margin-bottom:7px; flex-wrap:wrap; }
+  .pname { font-weight:600; font-size:13px; }
+  .tag { font-size:10px; padding:1px 6px; border-radius:9px; border:1px solid var(--border);
+         color:var(--dim); margin-left:5px; }
+  .tag.est { color:var(--warn); border-color:var(--warn); }
+  .tag.out { color:var(--bad); border-color:var(--bad); }
+
+  /* A barra que importa: cota diaria */
+  .quota { display:flex; align-items:center; gap:9px; margin:5px 0 3px; }
+  .bar { flex:1; height:8px; background:var(--border); border-radius:4px;
+         overflow:hidden; min-width:70px; }
+  .fill { height:100%; background:var(--ok); transition:width .4s,background .4s; }
+  .fill.warn { background:var(--warn); }
+  .fill.bad  { background:var(--bad); }
+  .qtext { font-size:11px; color:var(--dim); white-space:nowrap; }
+  .reset { font-size:11px; color:var(--accent); }
+
+  /* Detalhe por modelo (recolhido por padrao) */
+  details { margin-top:7px; }
+  summary { cursor:pointer; color:var(--dim); font-size:11px; outline:none;
+            user-select:none; padding:2px 0; }
+  summary:hover { color:var(--text); }
+  .m { display:flex; align-items:center; gap:8px; padding:4px 0 4px 10px;
+       border-left:2px solid var(--border); margin-top:5px; font-size:11px; }
+  .m.dead { border-left-color:var(--bad); opacity:.6; }
+  .m.pinned { border-left-color:var(--accent); }
+  .mname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mstat { color:var(--dim); white-space:nowrap; font-size:10px; }
+  .use { border:1px solid var(--border); background:transparent; color:var(--dim);
+         border-radius:4px; padding:1px 7px; cursor:pointer; font:inherit;
+         font-size:10px; flex-shrink:0; }
+  .use:hover { background:var(--hover); color:var(--text); }
+  .use.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+  footer { display:flex; justify-content:space-between; color:var(--dim);
+           font-size:10px; margin-top:11px; flex-wrap:wrap; gap:8px; }
+  .empty { color:var(--dim); font-style:italic; font-size:11px; }
 </style>
 </head>
 <body>
-  <h1>LLM Router</h1>
-  <div class="sub" id="summary">carregando…</div>
-  <div id="providers"></div>
-  <div class="foot">
-    <span id="host"></span>
-    <span id="updated"></span>
+  <header>
+    <h1>LLM Router</h1>
+    <span class="sub" id="summary">carregando…</span>
+  </header>
+
+  <div class="control">
+    <label>PERFIL ATIVO</label>
+    <div class="chips" id="profiles"></div>
+    <div class="pinbar" id="pinbar" hidden></div>
   </div>
 
+  <div id="providers"></div>
+
+  <footer>
+    <span id="host"></span>
+    <span id="updated"></span>
+  </footer>
+
 <script>
-// Estado global: os dados do servidor e o instante em que chegaram.
-// A contagem regressiva roda localmente a cada segundo, para não
-// martelar o servidor — só recarregamos os dados a cada 10s.
-let DATA = null, FETCHED_AT = 0;
+let DATA = null, PREFS = null, AT = 0;
 
-const fmt = n => n == null ? "-" : n.toLocaleString("pt-BR");
+const mil = n => n == null ? "-" : n.toLocaleString("pt-BR");
 
-function countdown(secs) {
+// Conta o tempo que passou desde a resposta do servidor, para o
+// contador andar sozinho sem novas requisições.
+function cd(secs, live = true) {
   if (secs == null) return "";
-  // Desconta o tempo passado desde que o servidor respondeu.
-  const left = Math.max(0, secs - (Date.now() - FETCHED_AT) / 1000);
-  if (left <= 0.5) return "pronto";
-  if (left < 60) return left.toFixed(0) + "s";
-  const m = Math.floor(left / 60), s = Math.floor(left % 60);
-  if (m < 60) return `${m}m${String(s).padStart(2, "0")}s`;
-  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m`;
+  const left = Math.max(0, secs - (live ? (Date.now() - AT) / 1000 : 0));
+  if (left <= 1) return "agora";
+  const h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60), s = Math.floor(left % 60);
+  if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
+  if (h) return `${h}h${String(m).padStart(2, "0")}m`;
+  if (m) return `${m}m${String(s).padStart(2, "0")}s`;
+  return `${s}s`;
 }
 
-function bar(used, limit) {
-  if (!limit) return null;
-  const pct = Math.min(100, Math.max(0, 100 * used / limit));
-  const cls = pct >= 90 ? "bad" : pct >= 70 ? "warn" : "";
-  return { pct, cls };
+async function post(body) {
+  await fetch("/prefs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  await load();
 }
 
-function rowHTML(label, used, limit, resetSecs) {
-  const b = bar(used, limit);
-  if (!b) return "";
-  const cd = countdown(resetSecs);
-  return `<div class="row">
-    <span class="label">${label}</span>
-    <span class="bar"><span class="fill ${b.cls}" style="width:${b.pct}%"></span></span>
-    <span class="val">${fmt(used)}/${fmt(limit)}</span>
-    <span class="cd ${cd === "pronto" ? "soon" : ""}" data-reset="${resetSecs ?? ""}">${cd}</span>
-  </div>`;
+function renderProfiles() {
+  if (!PREFS) return;
+  const active = PREFS.profile;
+  document.getElementById("profiles").innerHTML =
+    `<button class="chip ${!active ? "on" : ""}" data-p="">auto</button>` +
+    PREFS.profiles.map(p =>
+      `<button class="chip ${active === p.profile ? "on" : ""}" data-p="${p.profile}">${p.profile}</button>`
+    ).join("");
+
+  document.querySelectorAll(".chip").forEach(b =>
+    b.onclick = () => post({ profile: b.dataset.p })
+  );
+
+  const bar = document.getElementById("pinbar");
+  if (PREFS.pin) {
+    bar.hidden = false;
+    bar.innerHTML = `📌 fixado em <b>${PREFS.pin.provider} / ${PREFS.pin.model}</b>` +
+                    ` <button class="unpin" id="unpin">soltar</button>`;
+    document.getElementById("unpin").onclick = () => post({ clear_pin: true });
+  } else {
+    bar.hidden = true;
+  }
 }
 
 function render() {
   if (!DATA) return;
-  const box = document.getElementById("providers");
-  let totalCalls = 0, totalTokens = 0, totalFail = 0;
+  let calls = 0, tokens = 0, fails = 0;
+  const pin = PREFS?.pin;
 
-  box.innerHTML = DATA.providers.map(p => {
-    totalCalls += p.calls_today;
-    totalTokens += p.tokens_today;
-    totalFail += p.failed_today;
+  document.getElementById("providers").innerHTML = DATA.providers.map(p => {
+    calls += p.calls_today; tokens += p.tokens_today; fails += p.failed_today;
 
-    const srcTag = p.source === "local"
-      ? '<span class="tag est">estimado</span>'
-      : '<span class="tag official">oficial</span>';
-    const outTag = p.exhausted ? '<span class="tag out">sem cota</span>' : "";
+    const pct = p.rpd_limit ? 100 * p.calls_today / p.rpd_limit : 0;
+    const cls = pct >= 90 ? "bad" : pct >= 70 ? "warn" : "";
+    const period = p.period === "month" ? "mês" : "hoje";
+    const est = p.source === "local" ? '<span class="tag est">estimado</span>' : "";
+    const out = p.exhausted ? '<span class="tag out">sem cota</span>' : "";
 
-    let body;
-    if (!p.models.length) {
-      body = p.rpd_limit
-        ? rowHTML("dia", p.calls_today, p.rpd_limit, null)
-        : '<div class="empty">sem uso hoje</div>';
-    } else {
-      body = p.models.map(m => {
-        const reqRow = rowHTML("req", (m.limit_requests ?? 0) - (m.remaining_requests ?? 0),
-                               m.limit_requests, m.reset_requests_in);
-        const tokRow = rowHTML("tok", (m.limit_tokens ?? 0) - (m.remaining_tokens ?? 0),
-                               m.limit_tokens, m.reset_tokens_in);
-        const lat = m.avg_latency ? ` · ${m.avg_latency}s` : "";
-        const stats = m.calls || m.failed
-          ? `${m.calls} chamadas · ${fmt(m.tokens)} tok${lat}${m.failed ? ` · ${m.failed} falhas` : ""}`
-          : "sem uso hoje";
-        return `<div class="model ${m.exhausted ? "dead" : ""}">
-          <div class="mname"><span>${m.model}</span><span class="muted">${stats}</span></div>
-          ${reqRow}${tokRow}
-        </div>`;
-      }).join("");
-    }
+    const quota = p.rpd_limit
+      ? `<div class="quota">
+           <span class="bar"><span class="fill ${cls}" style="width:${Math.min(100, pct)}%"></span></span>
+           <span class="qtext">${p.calls_today}/${mil(p.rpd_limit)}</span>
+         </div>
+         <div class="qtext">
+           ${mil(p.tokens_today)} tokens ${period}${p.failed_today ? ` · ${p.failed_today} falhas` : ""}
+           · reseta em <span class="reset" data-r="${p.daily_reset_in ?? ""}">${cd(p.daily_reset_in)}</span>
+         </div>`
+      : `<div class="qtext">${p.calls_today} chamadas · ${mil(p.tokens_today)} tokens ${period}
+         · reseta em <span class="reset" data-r="${p.daily_reset_in ?? ""}">${cd(p.daily_reset_in)}</span></div>`;
 
-    return `<div class="card">
-      <div class="phead">
-        <span class="pname">${p.provider}</span>
-        <span>${outTag} ${srcTag}</span>
-      </div>
-      ${body}
+    const models = p.models.length
+      ? `<details><summary>${p.models.length} modelo(s) — detalhe e troca manual</summary>` +
+        p.models.map(m => {
+          const isPin = pin && pin.provider === p.provider && pin.model === m.model;
+          const tk = m.limit_tokens
+            ? `${mil(m.remaining_tokens)}/${mil(m.limit_tokens)} tok/min`
+            : `${m.calls} chamadas`;
+          const lat = m.avg_latency ? ` · ${m.avg_latency}s` : "";
+          return `<div class="m ${m.exhausted ? "dead" : ""} ${isPin ? "pinned" : ""}">
+            <span class="mname">${m.model}</span>
+            <span class="mstat">${tk}${lat}</span>
+            <button class="use ${isPin ? "on" : ""}"
+                    data-prov="${p.provider}" data-model="${m.model}">
+              ${isPin ? "fixado" : "usar"}</button>
+          </div>`;
+        }).join("") + "</details>"
+      : '<div class="empty">sem uso hoje</div>';
+
+    return `<div class="card ${p.exhausted ? "out" : ""}">
+      <div class="top"><span class="pname">${p.provider}${est}${out}</span></div>
+      ${quota}${models}
     </div>`;
   }).join("");
 
-  const s = DATA.system || {};
+  document.querySelectorAll(".use").forEach(b =>
+    b.onclick = () => {
+      const on = b.classList.contains("on");
+      post(on ? { clear_pin: true }
+              : { pin_provider: b.dataset.prov, pin_model: b.dataset.model });
+    }
+  );
+
   document.getElementById("summary").textContent =
-    `${totalCalls} chamadas hoje · ${fmt(totalTokens)} tokens` +
-    (totalFail ? ` · ${totalFail} falhas` : "");
+    `${calls} chamadas · ${mil(tokens)} tokens` + (fails ? ` · ${fails} falhas` : "");
+  const s = DATA.system || {};
   document.getElementById("host").textContent =
-    s.server_ram_mb ? `servidor ${s.server_ram_mb} MB · RAM livre ${fmt(s.free_ram_mb)} MB` : "";
+    s.server_ram_mb ? `servidor ${s.server_ram_mb} MB · RAM livre ${mil(s.free_ram_mb)} MB` : "";
   document.getElementById("updated").textContent =
-    "atualizado " + new Date().toLocaleTimeString("pt-BR");
+    new Date().toLocaleTimeString("pt-BR");
 }
 
-// Atualiza só os contadores, sem redesenhar tudo (evita piscar).
+// Só os contadores, a cada segundo, sem redesenhar a página.
 function tick() {
-  document.querySelectorAll(".cd").forEach(el => {
-    const v = el.dataset.reset;
-    if (v === "") return;
-    const txt = countdown(parseFloat(v));
-    el.textContent = txt;
-    el.classList.toggle("soon", txt === "pronto");
+  document.querySelectorAll(".reset").forEach(el => {
+    if (el.dataset.r !== "") el.textContent = cd(parseFloat(el.dataset.r));
   });
 }
 
 async function load() {
   try {
-    const r = await fetch("/usage");
-    DATA = await r.json();
-    FETCHED_AT = Date.now();
-    render();
-  } catch (e) {
+    const [u, p] = await Promise.all([
+      fetch("/usage").then(r => r.json()),
+      fetch("/prefs").then(r => r.json()),
+    ]);
+    DATA = u; PREFS = p; AT = Date.now();
+    renderProfiles(); render();
+  } catch {
     document.getElementById("summary").textContent = "servidor offline";
   }
 }
 
 load();
-setInterval(load, 10000);  // recarrega dados
-setInterval(tick, 1000);   // conta regressiva local
+setInterval(load, 10000);
+setInterval(tick, 1000);
 </script>
 </body>
 </html>

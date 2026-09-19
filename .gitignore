@@ -37,3 +37,6 @@ desktop.ini
 # Banco de consumo (local, com historico de uso)
 usage.db
 usage.db-*
+
+# Preferencias de runtime (perfil ativo, trava manual)
+prefs.json

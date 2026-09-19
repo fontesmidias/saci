@@ -1,14 +1,14 @@
-// Extensão local: mostra o consumo de cota na barra de status do VSCode.
+// Extensão local: consumo de cota na barra de status + seletor de perfil.
 //
-// Consulta GET /status do servidor do LLM Router e exibe algo como:
-//     $(zap) groq 12% · 1m26s
+// Barra:   ⚡ groq 1% · 4h39m
+//          (provedor ativo, % da cota diária, quando reseta)
 //
-// Clicar abre o painel completo numa aba lateral.
+// Clique:  menu para trocar de perfil ou fixar um modelo — como o
+//          seletor de modelo do Claude Code.
 
 const vscode = require("vscode");
 
-let item;
-let timer;
+let item, timer;
 
 function cfg() {
   const c = vscode.workspace.getConfiguration("llmRouter");
@@ -18,71 +18,171 @@ function cfg() {
   };
 }
 
-function humanize(secs) {
+async function api(path, options) {
+  const res = await fetch(`${cfg().url}${path}`, {
+    signal: AbortSignal.timeout(5000),
+    ...options,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+function human(secs) {
   if (secs == null) return null;
-  if (secs <= 0.5) return "pronto";
-  if (secs < 60) return `${Math.round(secs)}s`;
-  const m = Math.floor(secs / 60);
-  const s = Math.round(secs % 60);
-  if (m < 60) return `${m}m${String(s).padStart(2, "0")}s`;
-  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m`;
+  if (secs <= 1) return "agora";
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+  if (h >= 24) return `${Math.floor(h / 24)}d${h % 24}h`;
+  if (h) return `${h}h${String(m).padStart(2, "0")}m`;
+  if (m) return `${m}m`;
+  return `${Math.round(secs)}s`;
 }
 
 async function refresh() {
-  const { url } = cfg();
   try {
-    // AbortSignal evita a barra travar se o servidor não responder.
-    const res = await fetch(`${url}/status`, { signal: AbortSignal.timeout(4000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const d = await res.json();
+    const [u, p] = await Promise.all([api("/usage"), api("/prefs")]);
 
-    if (!d.active) {
-      item.text = "$(zap) LLM: sem cota";
-      item.tooltip = "Todos os provedores estao sem cota no momento.";
-      item.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
-      return;
-    }
+    // O provedor "ativo" é o primeiro da cascata com cota sobrando.
+    const live = u.providers.filter(x => !x.exhausted);
+    const active = live[0] || u.providers[0];
+    if (!active) throw new Error("sem dados");
 
-    const pct = d.used_pct ?? 0;
-    const reset = humanize(d.reset_in);
-    item.text = `$(zap) ${d.active} ${pct.toFixed(0)}%` + (reset ? ` · ${reset}` : "");
+    const pct = active.rpd_limit
+      ? 100 * active.calls_today / active.rpd_limit
+      : 0;
+    const reset = human(active.daily_reset_in);
+    const pinned = p.pin ? "$(pin) " : "";
 
-    // Amarelo acima de 70%, vermelho acima de 90%.
+    item.text = `${pinned}$(zap) ${active.provider} ${pct.toFixed(0)}%` +
+                (reset ? ` · ${reset}` : "");
+
     item.backgroundColor =
       pct >= 90 ? new vscode.ThemeColor("statusBarItem.errorBackground")
       : pct >= 70 ? new vscode.ThemeColor("statusBarItem.warningBackground")
       : undefined;
 
-    const out = d.exhausted?.length ? `\nSem cota: ${d.exhausted.join(", ")}` : "";
-    item.tooltip = new vscode.MarkdownString(
-      `**LLM Router**\n\n` +
-      `Provedor ativo: \`${d.active}\` (${pct.toFixed(1)}% da cota usada)\n\n` +
-      `Hoje: ${d.calls_today} chamadas · ${d.tokens_today.toLocaleString("pt-BR")} tokens` +
-      out +
-      `\n\n_Clique para abrir o painel._`
+    const calls = u.providers.reduce((a, x) => a + x.calls_today, 0);
+    const toks = u.providers.reduce((a, x) => a + x.tokens_today, 0);
+    const lines = u.providers
+      .filter(x => x.rpd_limit)
+      .map(x => {
+        const q = `${x.calls_today}/${x.rpd_limit}`;
+        const r = human(x.daily_reset_in);
+        const flag = x.exhausted ? " ⛔" : "";
+        return `- \`${x.provider}\` ${q} · reseta em ${r}${flag}`;
+      });
+
+    const md = new vscode.MarkdownString(
+      `**LLM Router** — perfil \`${p.profile || "auto"}\`\n\n` +
+      (p.pin ? `📌 fixado: \`${p.pin.provider}/${p.pin.model}\`\n\n` : "") +
+      lines.join("\n") +
+      `\n\nHoje: ${calls} chamadas · ${toks.toLocaleString("pt-BR")} tokens` +
+      `\n\n_Clique para trocar de perfil ou modelo._`
     );
-  } catch (e) {
+    md.isTrusted = true;
+    item.tooltip = md;
+  } catch {
     item.text = "$(zap) LLM: offline";
-    item.tooltip = `Servidor nao responde em ${url}.\nRode: llm-on`;
+    item.tooltip = `Servidor nao responde em ${cfg().url}.\nRode: llm-on`;
     item.backgroundColor = undefined;
   }
 }
 
+// Menu de troca — o equivalente ao seletor de modelo do Claude Code.
+async function pickMenu() {
+  let u, p;
+  try {
+    [u, p] = await Promise.all([api("/usage"), api("/prefs")]);
+  } catch {
+    const go = await vscode.window.showErrorMessage(
+      "Servidor do LLM Router nao responde.", "Abrir painel"
+    );
+    if (go) openDashboard();
+    return;
+  }
+
+  const items = [];
+
+  items.push({ label: "Perfis", kind: vscode.QuickPickItemKind.Separator });
+  items.push({
+    label: `${!p.profile ? "$(check) " : ""}auto`,
+    description: "usa o perfil que a requisicao pedir",
+    action: () => api("/prefs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile: "" }),
+    }),
+  });
+  for (const prof of p.profiles) {
+    const first = prof.steps[0];
+    items.push({
+      label: `${p.profile === prof.profile ? "$(check) " : ""}${prof.profile}`,
+      description: first ? `${first.label} · ${first.model}` : "",
+      action: () => api("/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile: prof.profile }),
+      }),
+    });
+  }
+
+  // Fixar um modelo específico, ignorando a ordem da cascata.
+  items.push({ label: "Fixar um modelo", kind: vscode.QuickPickItemKind.Separator });
+  if (p.pin) {
+    items.push({
+      label: "$(close) soltar modelo fixado",
+      description: `${p.pin.provider}/${p.pin.model}`,
+      action: () => api("/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clear_pin: true }),
+      }),
+    });
+  }
+  for (const prov of u.providers) {
+    for (const m of prov.models) {
+      const isPin = p.pin && p.pin.provider === prov.provider && p.pin.model === m.model;
+      const bits = [];
+      if (m.exhausted) bits.push("sem cota");
+      if (m.avg_latency) bits.push(`${m.avg_latency}s`);
+      items.push({
+        label: `${isPin ? "$(pin) " : ""}${prov.provider} · ${m.model}`,
+        description: bits.join(" · "),
+        action: () => api("/prefs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pin_provider: prov.provider, pin_model: m.model }),
+        }),
+      });
+    }
+  }
+
+  items.push({ label: "", kind: vscode.QuickPickItemKind.Separator });
+  items.push({ label: "$(graph) abrir painel completo", action: openDashboard });
+
+  const choice = await vscode.window.showQuickPick(items, {
+    title: "LLM Router",
+    placeHolder: "Escolha o perfil ou fixe um modelo",
+  });
+  if (choice?.action) {
+    await choice.action();
+    await refresh();
+  }
+}
+
+async function openDashboard() {
+  await vscode.commands.executeCommand("simpleBrowser.show", `${cfg().url}/dashboard`);
+}
+
 function activate(context) {
   item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  item.command = "llmRouter.openDashboard";
+  item.command = "llmRouter.pick";
   item.text = "$(zap) LLM: …";
   item.show();
 
   context.subscriptions.push(
     item,
-    vscode.commands.registerCommand("llmRouter.openDashboard", async () => {
-      const { url } = cfg();
-      await vscode.commands.executeCommand(
-        "simpleBrowser.show",
-        `${url}/dashboard`
-      );
-    }),
+    vscode.commands.registerCommand("llmRouter.pick", pickMenu),
+    vscode.commands.registerCommand("llmRouter.openDashboard", openDashboard),
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration("llmRouter")) start();
     })

@@ -4,12 +4,22 @@
   "description": "Mostra consumo de cota dos provedores de LLM na barra de status",
   "version": "0.1.0",
   "publisher": "local",
-  "engines": { "vscode": "^1.75.0" },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./extension.js",
   "contributes": {
     "commands": [
+      {
+        "command": "llmRouter.pick",
+        "title": "LLM Router: trocar perfil ou modelo"
+      },
       {
         "command": "llmRouter.openDashboard",
         "title": "LLM Router: abrir painel de consumo"

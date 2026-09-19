@@ -33,6 +33,7 @@ from openai import (
     RateLimitError,
 )
 
+from . import prefs
 from . import usage as usage_db
 from .providers import DEFAULT_ORDER, DEFAULT_PROFILE, PROFILES, PROVIDERS, Provider
 
@@ -83,11 +84,19 @@ class LLMRouter:
         env_file: str | Path | None = None,
         on_event: Callable[[str], None] | None = None,
         skip_exhausted: bool = True,
+        honor_pin: bool = True,
     ) -> None:
         load_dotenv(env_file or ROOT / ".env")
         self.skip_exhausted = skip_exhausted
+        self.honor_pin = honor_pin
 
-        self.profile = profile or os.getenv("LLM_ROUTER_PROFILE") or DEFAULT_PROFILE
+        # Perfil escolhido manualmente no seletor tem prioridade sobre o .env.
+        self.profile = (
+            profile
+            or prefs.load().get("profile")
+            or os.getenv("LLM_ROUTER_PROFILE")
+            or DEFAULT_PROFILE
+        )
         if self.profile not in PROFILES:
             raise RouterError(
                 f"Perfil desconhecido: {self.profile!r}. "
@@ -109,6 +118,16 @@ class LLMRouter:
         removidos — se todos estiverem no limite, ainda vale tentar (a
         cota pode ter resetado desde a última leitura).
         """
+        # Trava manual: o usuário escolheu um modelo no seletor do VSCode.
+        # Ele vai na frente, mas a cascata continua atrás como rede de
+        # segurança — travar não deveria significar ficar sem resposta.
+        forced: list[tuple[Provider, str]] = []
+        pin = prefs.pinned()
+        if pin and self.honor_pin:
+            pkey, pmodel = pin
+            if pkey in PROVIDERS and (os.getenv(PROVIDERS[pkey].env) or "").strip():
+                forced.append((PROVIDERS[pkey], pmodel))
+
         ready: list[tuple[Provider, str]] = []
         exhausted: list[tuple[Provider, str]] = []
 
@@ -131,7 +150,13 @@ class LLMRouter:
             names = {f"{p.label}/{m.split('/')[-1]}" for p, m in exhausted}
             self.on_event(f"[cota] adiando: {', '.join(sorted(names))}")
 
-        return ready + exhausted
+        ordered = ready + exhausted
+        if forced:
+            rest = [(p, m) for (p, m) in ordered
+                    if not (p.key == forced[0][0].key and m == forced[0][1])]
+            self.on_event(f"[fixado] {forced[0][0].label} / {forced[0][1]}")
+            return forced + rest
+        return ordered
 
     def available(self) -> list[Provider]:
         """Provedores com chave preenchida, na ordem configurada."""

@@ -29,6 +29,7 @@ exige autenticação, então NÃO o exponha na rede sem antes adicionar uma.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import uuid
@@ -236,6 +237,57 @@ def status_line() -> dict:
         "tokens_today": tokens,
         "exhausted": [r["provider"] for r in rows if r["exhausted"]],
     }
+
+
+class PrefsUpdate(BaseModel):
+    profile: str | None = None
+    pin_provider: str | None = None
+    pin_model: str | None = None
+    clear_pin: bool = False
+
+
+@app.get("/prefs")
+def get_prefs() -> dict:
+    """Perfil ativo, trava manual e as opções disponíveis para o seletor."""
+    from llmrouter import prefs
+    from llmrouter.providers import PROVIDERS
+
+    current = prefs.load()
+    options = [
+        {
+            "profile": name,
+            "steps": [
+                {"provider": pkey, "label": PROVIDERS[pkey].label, "model": model}
+                for pkey, model in steps
+            ],
+        }
+        for name, steps in PROFILES.items()
+    ]
+    return {
+        "profile": current.get("profile"),
+        "pin": current.get("pin"),
+        "profiles": options,
+        "env_profile": os.getenv("LLM_ROUTER_PROFILE"),
+    }
+
+
+@app.post("/prefs")
+def set_prefs(update: PrefsUpdate) -> dict:
+    """Troca o perfil ativo ou trava um modelo. Vale na chamada seguinte."""
+    from llmrouter import prefs
+
+    changes: dict = {}
+    if update.clear_pin:
+        changes["pin"] = None
+    elif update.pin_provider and update.pin_model:
+        changes["pin"] = {"provider": update.pin_provider, "model": update.pin_model}
+
+    if update.profile is not None:
+        changes["profile"] = update.profile or None
+
+    saved = prefs.save(**changes) if changes else prefs.load()
+    print(f"\n-> prefs: {saved}", file=sys.stderr, flush=True)
+    return saved
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
