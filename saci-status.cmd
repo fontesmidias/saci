@@ -5,4 +5,4 @@ echo === PROCESSO ===
 call pm2 list
 echo.
 echo === CONSUMO ===
-"%~dp0.venv\Scripts\python.exe" "%~dp0ask.py" --usage
+"%~dp0.venv\Scripts\python.exe" "%~dp0saci/cli.py" --usage

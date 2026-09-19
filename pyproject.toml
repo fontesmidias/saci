@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "saci"
+version = "0.1.0"
+description = "Router for free-tier LLMs with automatic fallback, quota tracking and model discovery. Sempre dá um jeito."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "Bruno Fontes" }]
+keywords = [
+  "llm", "free-tier", "router", "fallback", "openai-compatible",
+  "groq", "gemini", "mistral", "nvidia-nim", "openrouter",
+  "cline", "aider", "quota", "rate-limit",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Environment :: Web Environment",
+  "Intended Audience :: Developers",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Natural Language :: English",
+  "Natural Language :: Portuguese (Brazilian)",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+  "openai>=1.54.0",
+  "python-dotenv>=1.0.1",
+  "httpx>=0.27.0",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.6"]
+
+[project.scripts]
+saci = "saci.cli:main"
+saci-server = "saci.server:main"
+
+[project.urls]
+Homepage = "https://github.com/fontesmidias/saci"
+Repository = "https://github.com/fontesmidias/saci"
+Issues = "https://github.com/fontesmidias/saci/issues"
+Changelog = "https://github.com/fontesmidias/saci/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+packages = ["saci"]
+
+[tool.setuptools.package-data]
+saci = ["dashboard.html"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

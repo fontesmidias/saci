@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 """
-CLI do LLM Router.
+CLI do Saci.
 
 Exemplos:
-    py ask.py "explique herança em Python"
-    py ask.py -p code "funcao que valida CPF"
-    py ask.py -p plan "como estruturar um sistema de RH multi-empresa"
-    py ask.py -v -p code "refatore isso"      # mostra a cascata
-    py ask.py --status                        # testa todos os provedores
-    py ask.py --profiles                      # lista os perfis
-    type arquivo.py | py ask.py -p code "adicione testes:"
+    saci "explique herança em Python"
+    saci -p code "funcao que valida CPF"
+    saci -p plan "como estruturar um sistema de RH multi-empresa"
+    saci -v -p code "refatore isso"      # mostra a cascata
+    saci --status                        # testa todos os provedores
+    saci --profiles                      # lista os perfis
+    type arquivo.py | saci -p code "adicione testes:"
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
-from llmrouter import LLMRouter, RouterError  # noqa: E402
-from llmrouter.providers import PROFILES, PROVIDERS  # noqa: E402
+from saci import LLMRouter, RouterError  # noqa: E402
+from saci.providers import PROFILES, PROVIDERS  # noqa: E402
 
 # Instrução de sistema por perfil: molda o comportamento do modelo.
 SYSTEM_PROMPTS = {
@@ -42,7 +42,7 @@ SYSTEM_PROMPTS = {
 
 def cmd_usage() -> int:
     """Mostra consumo e cota restante por provedor e por modelo."""
-    from llmrouter import usage as usage_db
+    from saci import usage as usage_db
 
     rows = usage_db.report()
     total_calls = sum(r["calls_today"] for r in rows)
@@ -123,8 +123,8 @@ def _bar(pct: float, width: int = 20) -> str:
 
 def cmd_catalog() -> int:
     """Modelos descobertos automaticamente, com veredito."""
-    from llmrouter import catalog
-    from llmrouter.providers import PROVIDERS
+    from saci import catalog
+    from saci.providers import PROVIDERS
 
     snap = catalog.snapshot()
     last = catalog.last_refresh_at()
@@ -149,7 +149,7 @@ def cmd_catalog() -> int:
 
 def cmd_refresh() -> int:
     """Roda a descoberta + sondagem agora, no terminal."""
-    from llmrouter import catalog
+    from saci import catalog
     for s in catalog.refresh_all(on_event=print):
         print(f"  => {s['provider']}: {s['ok']} ok de {s['chat']} de chat"
               + (f"  ({s['error']})" if s.get("error") else ""))
@@ -197,7 +197,7 @@ def cmd_status(timeout: float) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        prog="ask",
+        prog="saci",
         description="Pergunta a uma cascata de LLMs gratuitos, com fallback automático.",
     )
     parser.add_argument("prompt", nargs="*", help="a pergunta")
@@ -230,7 +230,7 @@ def main() -> int:
 
     prompt = " ".join(args.prompt).strip()
 
-    # Permite encadear: type arquivo.py | py ask.py -p code "adicione testes:"
+    # Permite encadear: type arquivo.py | saci -p code "adicione testes:"
     if not sys.stdin.isatty():
         piped = sys.stdin.read().strip()
         if piped:

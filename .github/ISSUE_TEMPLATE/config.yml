@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions & ideas / Dúvidas e ideias
+    url: https://github.com/fontesmidias/saci/discussions
+    about: Ask how to set it up, share which providers work for you, suggest features.

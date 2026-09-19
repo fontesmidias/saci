@@ -1,0 +1,32 @@
+name: Bug report
+description: Something broke (routing, dashboard, CLI, extension)
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what you got. Portuguese is fine.
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Provider / model involved
+      placeholder: groq / openai/gpt-oss-120b
+  - type: textarea
+    id: output
+    attributes:
+      label: Output of `saci --usage` and/or `saci --catalog`
+      description: Paste it here. Keys are never printed by these commands, but double-check.
+      render: text
+  - type: textarea
+    id: log
+    attributes:
+      label: Relevant log lines (`saci-logs`)
+      render: text
+  - type: input
+    id: env
+    attributes:
+      label: OS / Python / how you run it
+      placeholder: Windows 11 · Python 3.14 · PM2 via saci-on

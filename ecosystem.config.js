@@ -1,8 +1,8 @@
-// Configuração do PM2 para o servidor do LLM Router.
+// Configuração do PM2 para o servidor do Saci.
 //
-//   pm2 start ecosystem.config.js   (ou: llm-on.cmd)
-//   pm2 stop llm-router             (ou: llm-off.cmd)
-//   pm2 logs llm-router             (ou: llm-logs.cmd)
+//   pm2 start ecosystem.config.js   (ou: saci-on)
+//   pm2 stop saci             (ou: saci-off)
+//   pm2 logs saci             (ou: saci-logs)
 //
 // O PM2 mantém o processo vivo em segundo plano: você fecha o terminal
 // e o servidor continua rodando. Ele também reinicia sozinho se cair.
@@ -12,7 +12,7 @@ const path = require("path");
 module.exports = {
   apps: [
     {
-      name: "llm-router",
+      name: "saci",
       script: path.join(__dirname, "server.py"),
       interpreter: path.join(__dirname, ".venv", "Scripts", "python.exe"),
       cwd: __dirname,
@@ -38,8 +38,8 @@ module.exports = {
       },
 
       // Logs em ./logs (ignorado pelo git).
-      out_file: path.join(__dirname, "logs", "router-out.log"),
-      error_file: path.join(__dirname, "logs", "router-err.log"),
+      out_file: path.join(__dirname, "logs", "saci-out.log"),
+      error_file: path.join(__dirname, "logs", "saci-err.log"),
       merge_logs: true,
       time: true,
     },

@@ -11,7 +11,7 @@ const vscode = require("vscode");
 let item, timer;
 
 function cfg() {
-  const c = vscode.workspace.getConfiguration("llmRouter");
+  const c = vscode.workspace.getConfiguration("saci");
   return {
     url: (c.get("serverUrl") || "http://127.0.0.1:8000").replace(/\/+$/, ""),
     refresh: Math.max(5, c.get("refreshSeconds") || 15),
@@ -65,7 +65,7 @@ async function refresh() {
     });
 
     const md = new vscode.MarkdownString(
-      `**LLM Router** — perfil \`${p.profile || "auto"}\`\n\n` +
+      `**Saci** — perfil \`${p.profile || "auto"}\`\n\n` +
       (p.pin ? `📌 fixado: \`${p.pin.provider}/${p.pin.model}\`\n\n` : "") +
       lines.join("\n") +
       `\n\nHoje: ${calls} chamadas · ${toks.toLocaleString("pt-BR")} tokens` +
@@ -74,8 +74,8 @@ async function refresh() {
     md.isTrusted = true;
     item.tooltip = md;
   } catch {
-    item.text = "$(zap) LLM: offline";
-    item.tooltip = `Servidor nao responde em ${cfg().url}.\nRode: llm-on`;
+    item.text = "$(zap) Saci: offline";
+    item.tooltip = `Servidor nao responde em ${cfg().url}.\nRode: saci-on`;
     item.backgroundColor = undefined;
   }
 }
@@ -86,7 +86,7 @@ async function pickMenu() {
   try {
     p = await api("/prefs");
   } catch {
-    const go = await vscode.window.showErrorMessage("Servidor do LLM Router nao responde.", "Abrir painel");
+    const go = await vscode.window.showErrorMessage("Saci nao responde.", "Abrir painel");
     if (go) openDashboard();
     return;
   }
@@ -135,7 +135,7 @@ async function pickMenu() {
   items.push({ label: "$(graph) abrir painel completo", action: openDashboard });
 
   const choice = await vscode.window.showQuickPick(items, {
-    title: "LLM Router",
+    title: "Saci",
     placeHolder: "Escolha o perfil ou fixe um modelo",
     matchOnDescription: true,
   });
@@ -151,15 +151,15 @@ async function openDashboard() {
 
 function activate(context) {
   item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  item.command = "llmRouter.pick";
-  item.text = "$(zap) LLM: …";
+  item.command = "saci.pick";
+  item.text = "$(zap) Saci: …";
   item.show();
 
   context.subscriptions.push(
     item,
-    vscode.commands.registerCommand("llmRouter.pick", pickMenu),
-    vscode.commands.registerCommand("llmRouter.openDashboard", openDashboard),
-    vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration("llmRouter")) start(); })
+    vscode.commands.registerCommand("saci.pick", pickMenu),
+    vscode.commands.registerCommand("saci.openDashboard", openDashboard),
+    vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration("saci")) start(); })
   );
   start();
 }

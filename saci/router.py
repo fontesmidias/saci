@@ -6,7 +6,7 @@ indisponibilidade (5xx), timeout ou modelo removido (404/410), passa
 para o próximo modelo e depois para o próximo provedor.
 
 Uso:
-    from llmrouter import LLMRouter
+    from saci import LLMRouter
 
     router = LLMRouter()
     r = router.ask("Explique o que é um índice em banco de dados.")

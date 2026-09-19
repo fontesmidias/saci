@@ -1,7 +1,7 @@
 {
-  "name": "llm-router-status",
-  "displayName": "LLM Router Status",
-  "description": "Mostra consumo de cota dos provedores de LLM na barra de status",
+  "name": "saci-status",
+  "displayName": "Saci",
+  "description": "Cota das LLMs gratuitas na barra de status, com seletor de modelo",
   "version": "0.1.0",
   "publisher": "local",
   "engines": {
@@ -17,23 +17,23 @@
   "contributes": {
     "commands": [
       {
-        "command": "llmRouter.pick",
-        "title": "LLM Router: trocar perfil ou modelo"
+        "command": "saci.pick",
+        "title": "Saci: trocar perfil ou modelo"
       },
       {
-        "command": "llmRouter.openDashboard",
-        "title": "LLM Router: abrir painel de consumo"
+        "command": "saci.openDashboard",
+        "title": "Saci: abrir painel de consumo"
       }
     ],
     "configuration": {
-      "title": "LLM Router",
+      "title": "Saci",
       "properties": {
-        "llmRouter.serverUrl": {
+        "saci.serverUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8000",
-          "description": "URL do servidor do LLM Router"
+          "description": "URL do servidor do Saci"
         },
-        "llmRouter.refreshSeconds": {
+        "saci.refreshSeconds": {
           "type": "number",
           "default": 15,
           "description": "Intervalo de atualizacao da barra de status, em segundos"

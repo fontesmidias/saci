@@ -1,0 +1,36 @@
+name: Provider request or limit change
+description: A free-tier provider to add, or a quota/limit that changed
+labels: [provider]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Provider
+      placeholder: SambaNova
+    validations:
+      required: true
+  - type: input
+    id: base
+    attributes:
+      label: OpenAI-compatible base URL
+      placeholder: https://api.sambanova.ai/v1
+  - type: input
+    id: keys
+    attributes:
+      label: Where to get a key
+      placeholder: https://cloud.sambanova.ai/
+  - type: dropdown
+    id: card
+    attributes:
+      label: Credit card required?
+      options: ["No", "Yes", "Only for paid models"]
+  - type: textarea
+    id: limits
+    attributes:
+      label: Free-tier limits you can confirm (RPM / RPD / tokens / reset time)
+      description: Say where you saw it — headers, dashboard, docs. "Unknown" is a valid answer.
+  - type: textarea
+    id: probe
+    attributes:
+      label: If you tried it — output of `saci --refresh` or `saci --catalog` for this provider
+      render: text

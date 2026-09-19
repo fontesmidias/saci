@@ -38,6 +38,7 @@ DB_PATH = ROOT / "usage.db"
 def user_tz() -> timezone:
     """Fuso do usuário (LLM_ROUTER_TZ, horas sobre UTC). Padrão: São Paulo, -3."""
     import os
+
     from dotenv import load_dotenv
     load_dotenv(ROOT / ".env")
     try:

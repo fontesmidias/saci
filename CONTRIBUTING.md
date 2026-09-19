@@ -1,0 +1,74 @@
+# Contributing to Saci
+
+Thanks for stopping by. Saci exists for people who can't pay for LLM APIs, so
+the most valuable contributions are the boring ones: a provider that works, a
+limit that changed, a model that died. *Português mais abaixo.*
+
+## The one rule
+
+**Nothing enters the config without having answered a real request.**
+Catalogs lie: models listed in `/models` return 404, 410 or 402 all the time.
+If you add or change a provider or model, paste the output of `saci --catalog`
+(or the probe result) in the PR. That's the whole review.
+
+## Run it locally
+
+```powershell
+git clone https://github.com/fontesmidias/saci
+cd saci
+py -m venv .venv
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
+copy .env.example .env      # add at least one key
+saci-on                     # server + hourly catalog (Windows, via PM2)
+saci --usage                # or: .venv\Scripts\python.exe -m saci.cli --usage
+```
+
+On Linux/macOS run `python -m saci.server` directly; the `.cmd` shortcuts are
+Windows-only for now (a cross-platform launcher is welcome).
+
+## Add a provider
+
+1. `saci/providers.py` — add a `Provider(...)`. Leave `models=[]`: the catalog
+   discovers and probes them. Set `cost="credits"` if it spends prepaid balance.
+2. `saci/usage.py` — add it to `KNOWN_LIMITS` with what you *know* (RPM/RPD,
+   reset timezone, `period`). Unknown is fine; say `source="local"`.
+3. `saci/catalog.py` — only if its `/models` needs special filtering
+   (`_is_chat`) or publishes pricing (`_free_by_catalog`).
+4. `.env.example` — the key name and where to get it.
+5. Run `saci --refresh` and paste the result in the PR.
+
+## Report a quota/limit change
+
+Open an issue with the provider, the old and new limit, and where you saw it
+(headers, dashboard, docs). Limits change silently; this is how the table stays
+honest.
+
+## Code style
+
+`ruff check saci` must pass. Match the surrounding code: small modules, comments
+that explain *why*, Portuguese or English both fine in comments. Keep it
+maintainable by a 27B model — that's a design goal, not a joke.
+
+## Pull requests
+
+- One topic per PR.
+- If behaviour changed, add a line to `CHANGELOG.md` under *Unreleased*.
+- Don't commit `.env`, `usage.db`, `prefs.json` or logs (they're ignored;
+  double-check anyway).
+
+---
+
+# Contribuindo (pt-BR)
+
+**A regra única:** nada entra na configuração sem ter respondido a uma
+requisição real. Ao adicionar ou mudar provedor/modelo, cole a saída de
+`saci --catalog` no PR.
+
+**Adicionar provedor:** `Provider(...)` em `saci/providers.py` (deixe
+`models=[]`; o catálogo descobre), limites conhecidos em `KNOWN_LIMITS`
+(`saci/usage.py`), nome da chave em `.env.example`, `saci --refresh`, cole o
+resultado.
+
+**Mudou uma cota?** Abra uma issue com o limite antigo, o novo e onde viu.
+
+Nunca commite `.env`, `usage.db`, `prefs.json` ou logs.
