@@ -160,7 +160,11 @@ function render() {
   let calls = 0, tokens = 0, fails = 0;
   const pin = PREFS?.pin;
 
-  document.getElementById("providers").innerHTML = DATA.providers.map(p => {
+  const showAll = document.getElementById("showall")?.checked;
+  const list = DATA.providers.filter(p => p.active || showAll);
+  const off = DATA.providers.filter(p => !p.active).length;
+
+  document.getElementById("providers").innerHTML = list.map(p => {
     calls += p.calls_today; tokens += p.tokens_today; fails += p.failed_today;
 
     const pct = p.rpd_limit ? 100 * p.calls_today / p.rpd_limit : 0;
@@ -203,7 +207,12 @@ function render() {
       <div class="top"><span class="pname">${p.provider}${est}${out}</span></div>
       ${quota}${models}
     </div>`;
-  }).join("");
+  }).join("") + (off ? `<label class="qtext" style="display:block;margin-top:8px;cursor:pointer">
+      <input type="checkbox" id="showall" ${showAll ? "checked" : ""}>
+      mostrar ${off} provedor(es) sem chave configurada</label>` : "");
+
+  const sa = document.getElementById("showall");
+  if (sa) sa.onchange = render;
 
   document.querySelectorAll(".use").forEach(b =>
     b.onclick = () => {

@@ -48,6 +48,14 @@ KNOWN_LIMITS: dict[str, dict] = {
     "mistral": {"rpm": 188, "source": "headers", "reset_tz": 0, "period": "day"},
     "nvidia": {"rpd": 1000, "rpm": 40, "source": "local", "reset_tz": 0, "period": "month"},
     "openrouter": {"rpd": 200, "rpm": 20, "source": "endpoint", "reset_tz": 0, "period": "day"},
+    # Keyless: sem cota publicada. Contamos só para você ver o uso.
+    "llm7": {"rpm": 20, "source": "local", "reset_tz": 0, "period": "day"},
+    # Configurados mas sem chave ainda — aparecem no painel como inativos.
+    "cerebras": {"rpd": 1000, "source": "local", "reset_tz": 0, "period": "day"},
+    "sambanova": {"rpd": 1000, "rpm": 30, "source": "local", "reset_tz": 0, "period": "day"},
+    "hyperbolic": {"rpm": 60, "source": "local", "reset_tz": 0, "period": "day"},
+    "siliconflow": {"rpm": 1000, "source": "local", "reset_tz": 0, "period": "day"},
+    "huggingface": {"rpm": 30, "source": "local", "reset_tz": 0, "period": "day"},
 }
 
 
@@ -363,6 +371,26 @@ def report() -> list[dict]:
     prov_usage = provider_usage()
     out = []
 
+    # Provedor "ativo" = tem chave configurada, ou dispensa chave.
+    # Carrega o .env aqui: o servidor pode chamar report() antes de
+    # qualquer LLMRouter ter sido construido, e sem isso as chaves
+    # nao estariam no ambiente ainda.
+    import os as _os
+
+    from dotenv import load_dotenv as _load
+
+    from .providers import PROVIDERS as _P
+
+    _load(ROOT / ".env")
+
+    def _active(key: str) -> bool:
+        prov = _P.get(key)
+        if prov is None:
+            return False
+        if not prov.env:
+            return True  # keyless
+        return bool((_os.getenv(prov.env) or "").strip())
+
     for provider, limits in KNOWN_LIMITS.items():
         pu = prov_usage.get(provider, {})
         rpd = limits.get("rpd")
@@ -399,6 +427,7 @@ def report() -> list[dict]:
             "rpd_limit": rpd,
             "rpd_used_pct": round(100 * used / rpd, 1) if rpd else None,
             # A cota que de fato acaba, e quando ela volta.
+            "active": _active(provider),
             "period": limits.get("period", "day"),
             "daily_reset_in": daily_reset_in(provider),
             "exhausted": is_exhausted(provider),
