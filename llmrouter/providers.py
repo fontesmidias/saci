@@ -70,7 +70,63 @@ PROVIDERS: dict[str, Provider] = {
         models=["qwen/qwen3.8-27b:free", "z-ai/glm-5.2:free"],
         notes="Modelos :free são disputados; 429 é comum. Última rede de segurança.",
     ),
-    # Cerebras fora da cascata: HTTP 402 (Payment Required) — sem free tier.
+
+    # --- Sem chave: funcionam na hora, sem cadastro -------------------
+    "llm7": Provider(
+        key="llm7",
+        label="LLM7.io",
+        env="",  # vazio = não precisa de chave
+        base_url="https://api.llm7.io/v1",
+        models=["codestral-latest", "GLM-5.3-Flash"],
+        notes="Zero cadastro. Verificado: codestral 2.6s, GLM 3.9s. "
+              "Nem todo modelo do catálogo responde (401), e a saída às vezes "
+              "vem contaminada. Serve como último recurso, não como principal.",
+    ),
+
+    # --- Exigem cadastro (chave ainda não configurada) ----------------
+    "cerebras": Provider(
+        key="cerebras",
+        label="Cerebras",
+        env="CEREBRAS_API_KEY",
+        base_url="https://api.cerebras.ai/v1",
+        models=["gpt-oss-120b", "qwen-3.8-27b"],
+        notes="Muito rápido, mas a conta testada retornou HTTP 402 "
+              "(exige plano pago). Fora dos perfis até isso mudar.",
+    ),
+    "sambanova": Provider(
+        key="sambanova",
+        label="SambaNova",
+        env="SAMBANOVA_API_KEY",
+        base_url="https://api.sambanova.ai/v1",
+        models=["Meta-Llama-3.3-70B-Instruct", "DeepSeek-R1"],
+        notes="Free tier sem cartão (30 RPM). Precisa de chave: cloud.sambanova.ai",
+    ),
+    "hyperbolic": Provider(
+        key="hyperbolic",
+        label="Hyperbolic",
+        env="HYPERBOLIC_API_KEY",
+        base_url="https://api.hyperbolic.xyz/v1",
+        models=["deepseek-ai/DeepSeek-V3", "Qwen/Qwen2.5-72B-Instruct"],
+        notes="60 RPM grátis em modelos abertos. Chave: app.hyperbolic.xyz",
+    ),
+    "siliconflow": Provider(
+        key="siliconflow",
+        label="SiliconFlow",
+        env="SILICONFLOW_API_KEY",
+        base_url="https://api.siliconflow.cn/v1",
+        models=["Qwen/Qwen2.5-7B-Instruct", "THUDM/glm-4-9b-chat"],
+        notes="Modelos 7B/9B grátis permanentes + 20M tokens de bônus. "
+              "Chave: siliconflow.cn",
+    ),
+    "huggingface": Provider(
+        key="huggingface",
+        label="HuggingFace",
+        env="HF_API_KEY",
+        base_url="https://router.huggingface.co/v1",
+        models=["meta-llama/Llama-3.3-70B-Instruct"],
+        notes="Inferência serverless em milhares de modelos abertos. "
+              "Token: huggingface.co/settings/tokens",
+    ),
 }
 
 # ---------------------------------------------------------------------
@@ -90,6 +146,7 @@ PROFILES: dict[str, list[tuple[str, str]]] = {
         ("groq", "openai/gpt-oss-20b"),
         ("nvidia", "z-ai/glm-5.3"),
         ("openrouter", "qwen/qwen3.8-27b:free"),
+        ("llm7", "codestral-latest"),
     ],
     # Planejar arquitetura, quebrar tarefas, decidir trade-offs.
     # Prioriza capacidade de raciocínio e contexto sobre latência.
@@ -101,6 +158,7 @@ PROFILES: dict[str, list[tuple[str, str]]] = {
         ("nvidia", "z-ai/glm-5.3"),
         ("groq", "groq/compound"),
         ("openrouter", "z-ai/glm-5.2:free"),
+        ("llm7", "GLM-5.3-Flash"),
     ],
     # Para agentes (Cline, Continue, Aider): prompts gigantes com system
     # prompt + arquivos + histórico. O Groq rejeita com HTTP 413
@@ -111,6 +169,7 @@ PROFILES: dict[str, list[tuple[str, str]]] = {
         ("google", "gemini-3.8-flash"),
         ("nvidia", "z-ai/glm-5.3"),
         ("groq", "openai/gpt-oss-120b"),
+        ("llm7", "codestral-latest"),
     ],
     # Perguntas rápidas do dia a dia. Latência acima de tudo.
     "fast": [
@@ -136,4 +195,6 @@ PROFILES: dict[str, list[tuple[str, str]]] = {
 }
 
 DEFAULT_PROFILE = "fast"
-DEFAULT_ORDER = ["groq", "google", "mistral", "nvidia", "openrouter"]
+DEFAULT_ORDER = ["groq", "google", "mistral", "nvidia", "openrouter",
+                 "llm7", "cerebras", "sambanova", "hyperbolic",
+                 "siliconflow", "huggingface"]

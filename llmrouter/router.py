@@ -125,7 +125,7 @@ class LLMRouter:
         pin = prefs.pinned()
         if pin and self.honor_pin:
             pkey, pmodel = pin
-            if pkey in PROVIDERS and (os.getenv(PROVIDERS[pkey].env) or "").strip():
+            if pkey in PROVIDERS and self._has_access(PROVIDERS[pkey]):
                 forced.append((PROVIDERS[pkey], pmodel))
 
         ready: list[tuple[Provider, str]] = []
@@ -135,7 +135,7 @@ class LLMRouter:
             if pkey not in self.order:
                 continue
             provider = PROVIDERS[pkey]
-            if not (os.getenv(provider.env) or "").strip():
+            if not self._has_access(provider):
                 continue
 
             # Por MODELO, nao por provedor: no Groq os tokens sao contados
@@ -160,13 +160,17 @@ class LLMRouter:
 
     def available(self) -> list[Provider]:
         """Provedores com chave preenchida, na ordem configurada."""
-        return [
-            PROVIDERS[k] for k in self.order
-            if (os.getenv(PROVIDERS[k].env) or "").strip()
-        ]
+        return [PROVIDERS[k] for k in self.order if self._has_access(PROVIDERS[k])]
+
+    def _has_access(self, provider: Provider) -> bool:
+        """Utilizável? Provedor sem `env` é keyless (ex.: LLM7)."""
+        if not provider.env:
+            return True
+        return bool((os.getenv(provider.env) or "").strip())
 
     def _api_key(self, provider: Provider) -> str:
-        return (os.getenv(provider.env) or "").strip()
+        # O SDK exige algo no lugar da chave; provedores keyless ignoram.
+        return (os.getenv(provider.env) or "").strip() if provider.env else "unused"
 
     def _scrub(self, text: str, api_key: str) -> str:
         """Nunca deixa a chave aparecer em log ou exceção."""
