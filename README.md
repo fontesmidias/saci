@@ -90,6 +90,25 @@ uma tentativa fadada ao erro. Isso vale mesmo se o Model ID for outro.
 > O servidor escuta só em `127.0.0.1` e **não exige autenticação**.
 > Não o exponha na rede sem antes adicionar uma.
 
+### Aider (agente de código no terminal, sem VSCode)
+
+Instalado com `uv tool install aider-chat --python 3.12` (o Aider exige
+Python < 3.13; o `uv` baixa um 3.12 isolado). A configuração fica em
+`%USERPROFILE%\.aider.conf.yml` e aponta para o router — vale em qualquer
+projeto:
+
+```powershell
+cd meu-projeto
+aider                       # abre o chat de código
+aider arquivo.py            # já com o arquivo no contexto
+aider --message "adicione testes para calc.py" calc.py   # não interativo
+```
+
+`model: openai/router-code` para editar, `weak-model: openai/router-fast`
+para mensagens de commit. `auto-commits: false`: você decide quando commitar.
+
+Verificado: edição real aplicada via Groq em 0,9s.
+
 ### Como biblioteca
 
 ```python
