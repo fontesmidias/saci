@@ -132,17 +132,46 @@ ainda é tentado como último recurso.
 O histórico fica em `usage.db` (SQLite local, fora do git), então sobrevive
 a reinícios do servidor.
 
-## Manutenção
+## Catálogo automático de modelos
 
-Provedores gratuitos mudam de catálogo com frequência. Quando algo quebrar:
+Você não mantém lista de modelos. Ao subir, e depois a cada hora, o
+servidor faz por provedor:
+
+1. **descobre** — `GET /models`
+2. **filtra** — descarta o que não é chat (embedding, TTS, imagem, guard…)
+3. **sonda** — uma chamada mínima em cada modelo *novo*, uma vez só:
+   `200` ok · `402/403` pago · `404/410` removido · `429` sem cota agora
+4. **guarda** — veredito, latência e contexto em `usage.db`
+5. **revisa** — sumiu do catálogo 2 vezes → removido; `429` re-testa em 1h;
+   `ok` re-testa a cada 14 dias; pago a cada 30
+
+Só o OpenRouter diz no catálogo o que é grátis. Nos outros, "grátis" é o
+que respondeu `200` — por isso a sondagem existe.
+
+Um provedor **novo** (chave recém-colada) entra na cascata sozinho: os
+perfis aceitam `(provedor, None)` = "os 2 melhores verificados", e todo
+provedor de `LLM_ROUTER_ORDER` que o perfil não cita entra no fim.
 
 ```powershell
-py scripts/discover.py     # quais modelos existem hoje
-py ask.py --status         # quais respondem agora
-py scripts/smoke_test.py   # mede latência dos candidatos
+ask --catalog    # o que foi descoberto, com veredito
+ask --refresh    # verificar agora, no terminal
 ```
 
-Depois atualize `llmrouter/providers.py` com o que passou.
+Ou no painel: **verificar agora**. Cada modelo mostra o veredito, e só os
+`ok` têm o botão **usar**.
+
+## Fuso horário
+
+`LLM_ROUTER_TZ=-3` (São Paulo). O painel mostra o reset como hora de
+relógio — *"reseta às 21:00"* — e cada provedor conta o "hoje" pelo seu
+próprio ciclo (Groq vira à meia-noite UTC = 21:00 aqui; Google, à
+meia-noite do Pacífico = 04:00 aqui).
+
+## Manutenção
+
+Quase nada: o catálogo se revisa sozinho. Se um perfil curado apontar para
+um modelo que sumiu, a cascata pula para o próximo; para limpar, edite
+`PROFILES` em `llmrouter/providers.py` guiado por `ask --catalog`.
 
 ## Estado verificado (19/09/2026)
 
@@ -153,7 +182,10 @@ Depois atualize `llmrouter/providers.py` com o que passou.
 | Mistral | ✅ | 0.5–2s | `codestral-latest` é ótimo para código |
 | NVIDIA NIM | ⚠️ | 15–70s | Muitos IDs dão 404/410/503 |
 | OpenRouter | ⚠️ | — | Modelos `:free` quase sempre em 429 |
+| LLM7.io | ⚠️ | 3s | Sem chave; instável, última rede |
+| Hyperbolic | 💳 | — | US$ 1 de crédito — **gasta saldo** |
 | Cerebras | ❌ | — | HTTP 402: exige plano pago |
+| SiliconFlow | ❌ | — | Cadastro não liberado; removido |
 
 ### Modelos descontinuados que listas desatualizadas ainda citam
 

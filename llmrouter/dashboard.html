@@ -8,25 +8,22 @@
   :root {
     --bg:#0d1117; --panel:#161b22; --border:#30363d; --hover:#1f2630;
     --text:#e6edf3; --dim:#8b949e;
-    --ok:#3fb950; --warn:#d29922; --bad:#f85149; --accent:#58a6ff;
+    --ok:#3fb950; --warn:#d29922; --bad:#f85149; --accent:#58a6ff; --credit:#d2a8ff;
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
       --bg:#fff; --panel:#f6f8fa; --border:#d0d7de; --hover:#eaeef2;
-      --text:#1f2328; --dim:#656d76;
+      --text:#1f2328; --dim:#656d76; --credit:#8250df;
     }
   }
   * { box-sizing:border-box; }
-  body {
-    margin:0; padding:14px; background:var(--bg); color:var(--text);
-    font:13px/1.45 ui-monospace,"Cascadia Code",Consolas,monospace;
-  }
+  body { margin:0; padding:14px; background:var(--bg); color:var(--text);
+         font:13px/1.45 ui-monospace,"Cascadia Code",Consolas,monospace; }
   header { display:flex; justify-content:space-between; align-items:baseline;
            gap:8px; flex-wrap:wrap; margin-bottom:12px; }
   h1 { font-size:14px; margin:0; font-weight:600; }
   .sub { color:var(--dim); font-size:11px; }
 
-  /* Perfil ativo — a troca manual que o usuario pediu */
   .control { background:var(--panel); border:1px solid var(--border);
              border-radius:6px; padding:10px 12px; margin-bottom:12px; }
   .control label { color:var(--dim); font-size:11px; display:block; margin-bottom:6px; }
@@ -38,10 +35,9 @@
   .chip.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
   .pinbar { margin-top:8px; font-size:11px; color:var(--dim);
             display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .unpin { color:var(--accent); cursor:pointer; text-decoration:underline; background:none;
-           border:none; font:inherit; padding:0; }
+  .lnk { color:var(--accent); cursor:pointer; text-decoration:underline; background:none;
+         border:none; font:inherit; padding:0; }
 
-  /* Cartao de provedor */
   .card { background:var(--panel); border:1px solid var(--border);
           border-radius:6px; padding:11px 12px; margin-bottom:9px; }
   .card.out { border-color:var(--bad); }
@@ -49,28 +45,32 @@
          gap:8px; margin-bottom:7px; flex-wrap:wrap; }
   .pname { font-weight:600; font-size:13px; }
   .tag { font-size:10px; padding:1px 6px; border-radius:9px; border:1px solid var(--border);
-         color:var(--dim); margin-left:5px; }
+         color:var(--dim); margin-left:5px; vertical-align:middle; }
   .tag.est { color:var(--warn); border-color:var(--warn); }
   .tag.out { color:var(--bad); border-color:var(--bad); }
+  .tag.credit { color:var(--credit); border-color:var(--credit); }
+  .tag.ok { color:var(--ok); border-color:var(--ok); }
+  .tag.paid { color:var(--credit); border-color:var(--credit); }
+  .tag.gone { color:var(--dim); text-decoration:line-through; }
+  .tag.rl { color:var(--warn); border-color:var(--warn); }
+  .tag.new { color:var(--accent); border-color:var(--accent); }
 
-  /* A barra que importa: cota diaria */
   .quota { display:flex; align-items:center; gap:9px; margin:5px 0 3px; }
   .bar { flex:1; height:8px; background:var(--border); border-radius:4px;
          overflow:hidden; min-width:70px; }
   .fill { height:100%; background:var(--ok); transition:width .4s,background .4s; }
   .fill.warn { background:var(--warn); }
   .fill.bad  { background:var(--bad); }
-  .qtext { font-size:11px; color:var(--dim); white-space:nowrap; }
-  .reset { font-size:11px; color:var(--accent); }
+  .qtext { font-size:11px; color:var(--dim); }
+  .reset { color:var(--accent); }
 
-  /* Detalhe por modelo (recolhido por padrao) */
   details { margin-top:7px; }
   summary { cursor:pointer; color:var(--dim); font-size:11px; outline:none;
             user-select:none; padding:2px 0; }
   summary:hover { color:var(--text); }
   .m { display:flex; align-items:center; gap:8px; padding:4px 0 4px 10px;
        border-left:2px solid var(--border); margin-top:5px; font-size:11px; }
-  .m.dead { border-left-color:var(--bad); opacity:.6; }
+  .m.dead { opacity:.55; }
   .m.pinned { border-left-color:var(--accent); }
   .mname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mstat { color:var(--dim); white-space:nowrap; font-size:10px; }
@@ -78,7 +78,8 @@
          border-radius:4px; padding:2px 10px; cursor:pointer; font:inherit;
          font-size:10px; flex-shrink:0; font-weight:600; }
   .use:hover { background:var(--accent); color:#fff; }
-  .use.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .use.on { background:var(--accent); color:#fff; }
+  .use:disabled { opacity:.35; cursor:default; }
 
   footer { display:flex; justify-content:space-between; color:var(--dim);
            font-size:10px; margin-top:11px; flex-wrap:wrap; gap:8px; }
@@ -92,9 +93,10 @@
   </header>
 
   <div class="control">
-    <label>PERFIL ATIVO &nbsp;<span style="text-transform:none;opacity:.75">— clique para trocar</span></label>
+    <label>PERFIL ATIVO &nbsp;<span style="opacity:.75">— clique para trocar</span></label>
     <div class="chips" id="profiles"></div>
     <div class="pinbar" id="pinbar" hidden></div>
+    <div class="pinbar" id="catbar"></div>
   </div>
 
   <div id="providers"></div>
@@ -105,15 +107,14 @@
   </footer>
 
 <script>
-let DATA = null, PREFS = null, AT = 0;
+let DATA = null, PREFS = null, CAT = null, AT = 0;
 
 const mil = n => n == null ? "-" : n.toLocaleString("pt-BR");
 
-// Conta o tempo que passou desde a resposta do servidor, para o
-// contador andar sozinho sem novas requisições.
-function cd(secs, live = true) {
+// Contagem regressiva local: desconta o tempo desde a resposta do servidor.
+function cd(secs) {
   if (secs == null) return "";
-  const left = Math.max(0, secs - (live ? (Date.now() - AT) / 1000 : 0));
+  const left = Math.max(0, secs - (Date.now() - AT) / 1000);
   if (left <= 1) return "agora";
   const h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60), s = Math.floor(left % 60);
   if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
@@ -122,129 +123,140 @@ function cd(secs, live = true) {
   return `${s}s`;
 }
 
-async function post(body) {
-  await fetch("/prefs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+const STATUS = {
+  ok:          ["ok", "ok"],
+  paid:        ["pago", "paid"],
+  gone:        ["removido", "gone"],
+  ratelimited: ["sem cota agora", "rl"],
+  error:       ["erro", "rl"],
+  auth:        ["chave inválida", "out"],
+  new:         ["a verificar", "new"],
+};
+
+async function post(url, body) {
+  await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+                     body: JSON.stringify(body || {}) });
   await load();
 }
 
 function renderProfiles() {
-  if (!PREFS) return;
   const active = PREFS.profile;
   document.getElementById("profiles").innerHTML =
     `<button class="chip ${!active ? "on" : ""}" data-p="">auto</button>` +
     PREFS.profiles.map(p =>
       `<button class="chip ${active === p.profile ? "on" : ""}" data-p="${p.profile}">${p.profile}</button>`
     ).join("");
-
-  document.querySelectorAll(".chip").forEach(b =>
-    b.onclick = () => post({ profile: b.dataset.p })
-  );
+  document.querySelectorAll(".chip").forEach(b => b.onclick = () => post("/prefs", { profile: b.dataset.p }));
 
   const bar = document.getElementById("pinbar");
   if (PREFS.pin) {
     bar.hidden = false;
-    bar.innerHTML = `📌 fixado em <b>${PREFS.pin.provider} / ${PREFS.pin.model}</b>` +
-                    ` <button class="unpin" id="unpin">soltar</button>`;
-    document.getElementById("unpin").onclick = () => post({ clear_pin: true });
-  } else {
-    bar.hidden = true;
-  }
+    bar.innerHTML = `📌 fixado em <b>${PREFS.pin.provider} / ${PREFS.pin.model}</b>
+                     <button class="lnk" id="unpin">soltar</button>`;
+    document.getElementById("unpin").onclick = () => post("/prefs", { clear_pin: true });
+  } else bar.hidden = true;
+
+  const last = CAT?.last_refresh_at ? new Date(CAT.last_refresh_at).toLocaleString("pt-BR",
+                 { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }) : "nunca";
+  document.getElementById("catbar").innerHTML =
+    `🔎 catálogo verificado: ${last} · <button class="lnk" id="refresh">verificar agora</button>`;
+  document.getElementById("refresh").onclick = async () => {
+    document.getElementById("refresh").textContent = "verificando…";
+    await post("/catalog/refresh");
+  };
+}
+
+function modelRow(pkey, m, pin) {
+  const isPin = pin && pin.provider === pkey && pin.model === m.model;
+  const [txt, cls] = STATUS[m.status] || [m.status, ""];
+  const lat = m.latency_ms ? `${(m.latency_ms / 1000).toFixed(1)}s` : "";
+  const ctx = m.context ? `${Math.round(m.context / 1000)}k` : "";
+  const usable = m.status === "ok";
+  return `<div class="m ${usable ? "" : "dead"} ${isPin ? "pinned" : ""}">
+    <span class="mname">${m.model}</span>
+    <span class="tag ${cls}">${txt}</span>
+    <span class="mstat">${[ctx, lat].filter(Boolean).join(" · ")}</span>
+    <button class="use ${isPin ? "on" : ""}" ${usable ? "" : "disabled"}
+            data-prov="${pkey}" data-model="${m.model}">${isPin ? "fixado" : "usar"}</button>
+  </div>`;
 }
 
 function render() {
   if (!DATA) return;
   let calls = 0, tokens = 0, fails = 0;
   const pin = PREFS?.pin;
-
   const showAll = document.getElementById("showall")?.checked;
   const list = DATA.providers.filter(p => p.active || showAll);
-  const off = DATA.providers.filter(p => !p.active).length;
+  const off = DATA.providers.length - DATA.providers.filter(p => p.active).length;
 
   document.getElementById("providers").innerHTML = list.map(p => {
     calls += p.calls_today; tokens += p.tokens_today; fails += p.failed_today;
-
     const pct = p.rpd_limit ? 100 * p.calls_today / p.rpd_limit : 0;
     const cls = pct >= 90 ? "bad" : pct >= 70 ? "warn" : "";
-    const period = p.period === "month" ? "mês" : "hoje";
-    const est = p.source === "local" ? '<span class="tag est">estimado</span>' : "";
-    const out = p.exhausted ? '<span class="tag out">sem cota</span>' : "";
+    const period = p.period === "month" ? "mês" : p.period === "credits" ? "" : "hoje";
+    const tags = [
+      p.cost === "credits" ? '<span class="tag credit">gasta crédito</span>' : "",
+      p.source === "local" ? '<span class="tag est">estimado</span>' : "",
+      p.exhausted ? '<span class="tag out">sem cota</span>' : "",
+    ].join("");
 
+    // "reseta às 21:00 (em 3h05m)" — a hora é o que se lê num relance.
+    const reset = p.daily_reset_at
+      ? ` · reseta às <span class="reset">${p.daily_reset_at}</span>
+          <span class="reset" data-r="${p.daily_reset_in ?? ""}">(${cd(p.daily_reset_in)})</span>`
+      : "";
     const quota = p.rpd_limit
       ? `<div class="quota">
            <span class="bar"><span class="fill ${cls}" style="width:${Math.min(100, pct)}%"></span></span>
-           <span class="qtext">${p.calls_today}/${mil(p.rpd_limit)}</span>
-         </div>
-         <div class="qtext">
-           ${mil(p.tokens_today)} tokens ${period}${p.failed_today ? ` · ${p.failed_today} falhas` : ""}
-           · reseta em <span class="reset" data-r="${p.daily_reset_in ?? ""}">${cd(p.daily_reset_in)}</span>
-         </div>`
-      : `<div class="qtext">${p.calls_today} chamadas · ${mil(p.tokens_today)} tokens ${period}
-         · reseta em <span class="reset" data-r="${p.daily_reset_in ?? ""}">${cd(p.daily_reset_in)}</span></div>`;
+           <span class="qtext">${p.calls_today}/${mil(p.rpd_limit)}</span></div>
+         <div class="qtext">${mil(p.tokens_today)} tokens ${period}${p.failed_today ? ` · ${p.failed_today} falhas` : ""}${reset}</div>`
+      : `<div class="qtext">${p.calls_today} chamadas · ${mil(p.tokens_today)} tokens ${period}${reset}</div>`;
 
-    const models = p.models.length
-      ? `<details><summary>▸ escolher modelo manualmente (${p.models.length})</summary>` +
-        p.models.map(m => {
-          const isPin = pin && pin.provider === p.provider && pin.model === m.model;
-          const tk = m.limit_tokens
-            ? `${mil(m.remaining_tokens)}/${mil(m.limit_tokens)} tok/min`
-            : `${m.calls} chamadas`;
-          const lat = m.avg_latency ? ` · ${m.avg_latency}s` : "";
-          return `<div class="m ${m.exhausted ? "dead" : ""} ${isPin ? "pinned" : ""}">
-            <span class="mname">${m.model}</span>
-            <span class="mstat">${tk}${lat}</span>
-            <button class="use ${isPin ? "on" : ""}"
-                    data-prov="${p.provider}" data-model="${m.model}">
-              ${isPin ? "fixado" : "usar"}</button>
-          </div>`;
-        }).join("") + "</details>"
-      : '<div class="empty">sem uso hoje</div>';
+    // Catálogo automático: tudo que foi descoberto, com veredito.
+    const cat = CAT?.providers?.[p.provider]?.models || [];
+    const okN = cat.filter(m => m.status === "ok").length;
+    const order = { ok: 0, new: 1, ratelimited: 2, error: 3, paid: 4, auth: 5, gone: 6 };
+    cat.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9)
+                    || (a.latency_ms ?? 1e9) - (b.latency_ms ?? 1e9));
+    const models = cat.length
+      ? `<details><summary>▸ ${okN} modelo(s) verificado(s) de ${cat.length} — escolher manualmente</summary>
+         ${cat.map(m => modelRow(p.provider, m, pin)).join("")}</details>`
+      : '<div class="empty">catálogo ainda não verificado</div>';
 
     return `<div class="card ${p.exhausted ? "out" : ""}">
-      <div class="top"><span class="pname">${p.provider}${est}${out}</span></div>
-      ${quota}${models}
-    </div>`;
+      <div class="top"><span class="pname">${p.provider}${tags}</span></div>
+      ${quota}${models}</div>`;
   }).join("") + (off ? `<label class="qtext" style="display:block;margin-top:8px;cursor:pointer">
-      <input type="checkbox" id="showall" ${showAll ? "checked" : ""}>
-      mostrar ${off} provedor(es) sem chave configurada</label>` : "");
+      <input type="checkbox" id="showall" ${showAll ? "checked" : ""}> mostrar ${off} provedor(es) sem chave</label>` : "");
 
   const sa = document.getElementById("showall");
   if (sa) sa.onchange = render;
-
-  document.querySelectorAll(".use").forEach(b =>
-    b.onclick = () => {
-      const on = b.classList.contains("on");
-      post(on ? { clear_pin: true }
-              : { pin_provider: b.dataset.prov, pin_model: b.dataset.model });
-    }
-  );
+  document.querySelectorAll(".use").forEach(b => b.onclick = () =>
+    post("/prefs", b.classList.contains("on") ? { clear_pin: true }
+                 : { pin_provider: b.dataset.prov, pin_model: b.dataset.model }));
 
   document.getElementById("summary").textContent =
     `${calls} chamadas · ${mil(tokens)} tokens` + (fails ? ` · ${fails} falhas` : "");
   const s = DATA.system || {};
   document.getElementById("host").textContent =
     s.server_ram_mb ? `servidor ${s.server_ram_mb} MB · RAM livre ${mil(s.free_ram_mb)} MB` : "";
-  document.getElementById("updated").textContent =
-    new Date().toLocaleTimeString("pt-BR");
+  document.getElementById("updated").textContent = new Date().toLocaleTimeString("pt-BR");
 }
 
-// Só os contadores, a cada segundo, sem redesenhar a página.
 function tick() {
-  document.querySelectorAll(".reset").forEach(el => {
-    if (el.dataset.r !== "") el.textContent = cd(parseFloat(el.dataset.r));
+  document.querySelectorAll("[data-r]").forEach(el => {
+    if (el.dataset.r !== "") el.textContent = `(${cd(parseFloat(el.dataset.r))})`;
   });
 }
 
 async function load() {
   try {
-    const [u, p] = await Promise.all([
+    const [u, p, c] = await Promise.all([
       fetch("/usage").then(r => r.json()),
       fetch("/prefs").then(r => r.json()),
+      fetch("/catalog").then(r => r.json()),
     ]);
-    DATA = u; PREFS = p; AT = Date.now();
+    DATA = u; PREFS = p; CAT = c; AT = Date.now();
     renderProfiles(); render();
   } catch {
     document.getElementById("summary").textContent = "servidor offline";

@@ -48,7 +48,9 @@ def cmd_usage() -> int:
     total_calls = sum(r["calls_today"] for r in rows)
     total_tokens = sum(r["tokens_today"] for r in rows)
 
-    print(f"CONSUMO DE HOJE (UTC): {total_calls} chamadas, {_mil(total_tokens)} tokens\n")
+    agora = usage_db.local_now().strftime("%d/%m %H:%M")
+    print(f"CONSUMO DE HOJE ({agora}): {total_calls} chamadas, {_mil(total_tokens)} tokens")
+    print("  (cada provedor conta o dia pelo proprio ciclo de reset)\n")
 
     for r in rows:
         if not r["models"] and not r["calls_today"]:
@@ -56,7 +58,9 @@ def cmd_usage() -> int:
 
         tag = "[oficial]" if r["source"] in ("headers", "endpoint") else "[estimado]"
         out = "  SEM COTA" if r["exhausted"] else ""
-        print(f"{r['provider'].upper()}  {tag}{out}")
+        cred = "  [GASTA CREDITO]" if r.get("cost") == "credits" else ""
+        reset = f"  reseta as {r['daily_reset_at']}" if r.get("daily_reset_at") else ""
+        print(f"{r['provider'].upper()}  {tag}{cred}{out}{reset}")
 
         if not r["models"]:
             if r["rpd_limit"]:
@@ -117,6 +121,41 @@ def _bar(pct: float, width: int = 20) -> str:
     return f"[{'#' * filled}{'.' * (width - filled)}] {pct:5.1f}%"
 
 
+def cmd_catalog() -> int:
+    """Modelos descobertos automaticamente, com veredito."""
+    from llmrouter import catalog
+    from llmrouter.providers import PROVIDERS
+
+    snap = catalog.snapshot()
+    last = catalog.last_refresh_at()
+    print(f"CATALOGO AUTOMATICO  (ultima verificacao: {last or 'nunca'})\n")
+    label = {"ok": "OK", "paid": "pago", "gone": "removido", "ratelimited": "429",
+             "error": "erro", "auth": "chave?", "new": "a verificar"}
+    for pkey, models in snap["models"].items():
+        prov = PROVIDERS.get(pkey)
+        cost = "  [GASTA CREDITO]" if prov and prov.cost == "credits" else ""
+        ok = sum(1 for m in models if m["status"] == "ok")
+        print(f"{(prov.label if prov else pkey).upper()}{cost}  {ok} ok de {len(models)}")
+        for m in sorted(models, key=lambda m: (m["status"] != "ok", m["latency_ms"] or 1e9)):
+            lat = f"{m['latency_ms']/1000:.1f}s" if m["latency_ms"] else ""
+            ctx = f"{m['context']//1000}k" if m["context"] else ""
+            det = f"  ({m['detail']})" if m["detail"] and m["status"] != "ok" else ""
+            print(f"  {label.get(m['status'], m['status']):11} {m['model']:44} {ctx:>5} {lat:>6}{det}")
+        print()
+    if not snap["models"]:
+        print("  (vazio — rode: ask --refresh, ou suba o servidor, que verifica sozinho)")
+    return 0
+
+
+def cmd_refresh() -> int:
+    """Roda a descoberta + sondagem agora, no terminal."""
+    from llmrouter import catalog
+    for s in catalog.refresh_all(on_event=print):
+        print(f"  => {s['provider']}: {s['ok']} ok de {s['chat']} de chat"
+              + (f"  ({s['error']})" if s.get("error") else ""))
+    return 0
+
+
 def cmd_profiles() -> int:
     print("Perfis disponíveis:\n")
     for name, steps in PROFILES.items():
@@ -174,10 +213,16 @@ def main() -> int:
     parser.add_argument("--status", action="store_true", help="testa todos os provedores")
     parser.add_argument("--profiles", action="store_true", help="lista os perfis")
     parser.add_argument("--usage", action="store_true", help="consumo e cota por provedor")
+    parser.add_argument("--catalog", action="store_true", help="modelos descobertos e veredito")
+    parser.add_argument("--refresh", action="store_true", help="descobre e sonda modelos agora")
     args = parser.parse_args()
 
     if args.usage:
         return cmd_usage()
+    if args.catalog:
+        return cmd_catalog()
+    if args.refresh:
+        return cmd_refresh()
     if args.profiles:
         return cmd_profiles()
     if args.status:

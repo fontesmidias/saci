@@ -34,6 +34,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / "usage.db"
 
+
+def user_tz() -> timezone:
+    """Fuso do usuário (LLM_ROUTER_TZ, horas sobre UTC). Padrão: São Paulo, -3."""
+    import os
+    from dotenv import load_dotenv
+    load_dotenv(ROOT / ".env")
+    try:
+        hours = float(os.getenv("LLM_ROUTER_TZ") or -3)
+    except ValueError:
+        hours = -3.0
+    return timezone(timedelta(hours=hours))
+
+
+def local_now() -> datetime:
+    return datetime.now(user_tz())
+
 _lock = threading.Lock()
 
 # Limites do free tier.
@@ -53,29 +69,21 @@ KNOWN_LIMITS: dict[str, dict] = {
     # Configurados mas sem chave ainda — aparecem no painel como inativos.
     "cerebras": {"rpd": 1000, "source": "local", "reset_tz": 0, "period": "day"},
     "sambanova": {"rpd": 1000, "rpm": 30, "source": "local", "reset_tz": 0, "period": "day"},
-    "hyperbolic": {"rpm": 60, "source": "local", "reset_tz": 0, "period": "day"},
-    "siliconflow": {"rpm": 1000, "source": "local", "reset_tz": 0, "period": "day"},
+    "hyperbolic": {"rpm": 60, "source": "local", "reset_tz": 0, "period": "credits"},
     "huggingface": {"rpm": 30, "source": "local", "reset_tz": 0, "period": "day"},
 }
 
 
-def daily_reset_in(provider: str) -> float | None:
-    """
-    Segundos até a cota diária (ou mensal) do provedor virar.
-
-    É esta a informação que importa no dia a dia: as janelas de 1 minuto
-    dos headers resetam antes de você terminar de ler.
-    """
+def daily_reset_moment(provider: str) -> datetime | None:
+    """O instante (UTC) em que a cota diária/mensal do provedor vira."""
     limits = KNOWN_LIMITS.get(provider)
-    if not limits:
-        return None
+    if not limits or limits.get("period") == "credits":
+        return None  # saldo pré-pago não reseta
 
-    now = datetime.now(timezone.utc)
-    offset = timedelta(hours=limits.get("reset_tz", 0))
-    local = now + offset  # hora local do provedor
+    tz = timezone(timedelta(hours=limits.get("reset_tz", 0)))
+    local = datetime.now(tz)  # relógio do provedor
 
     if limits.get("period") == "month":
-        # Primeiro dia do mês seguinte, no fuso do provedor.
         if local.month == 12:
             nxt = local.replace(year=local.year + 1, month=1, day=1,
                                 hour=0, minute=0, second=0, microsecond=0)
@@ -84,10 +92,49 @@ def daily_reset_in(provider: str) -> float | None:
                                 hour=0, minute=0, second=0, microsecond=0)
     else:
         nxt = (local + timedelta(days=1)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
+            hour=0, minute=0, second=0, microsecond=0)
+    return nxt.astimezone(timezone.utc)
 
-    return round((nxt - local).total_seconds(), 0)
+
+def daily_reset_in(provider: str) -> float | None:
+    """Segundos até a cota virar — para a contagem regressiva do painel."""
+    moment = daily_reset_moment(provider)
+    if moment is None:
+        return None
+    return max(0.0, round((moment - datetime.now(timezone.utc)).total_seconds(), 0))
+
+
+def daily_reset_at_local(provider: str) -> str | None:
+    """
+    O reset como hora de relógio no fuso do usuário: "21:00" ou
+    "amanhã 04:00". Vem do instante exato, não de uma soma de segundos
+    (que arredondava para 20:59).
+    """
+    moment = daily_reset_moment(provider)
+    if moment is None:
+        return None
+    moment = moment.astimezone(user_tz())
+    today = local_now().date()
+    hhmm = moment.strftime("%H:%M")
+    if moment.date() == today:
+        return hhmm
+    if moment.date() == today + timedelta(days=1):
+        return f"amanhã {hhmm}"
+    return moment.strftime("%d/%m %H:%M")
+
+
+def provider_day(provider: str, when: datetime | None = None) -> str:
+    """
+    A data "de hoje" segundo o relógio de reset DO PROVEDOR.
+
+    A cota do Groq vira à meia-noite UTC (21:00 em São Paulo); a do
+    Google, à meia-noite do Pacífico (04:00 em São Paulo). Contar por
+    dia civil de São Paulo misturaria dois ciclos. Cada provedor tem o
+    seu "hoje".
+    """
+    tz_h = KNOWN_LIMITS.get(provider, {}).get("reset_tz", 0)
+    now = when or datetime.now(timezone.utc)
+    return (now + timedelta(hours=tz_h)).strftime("%Y-%m-%d")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS calls (
@@ -180,7 +227,7 @@ def record_call(
             " VALUES (?,?,?,?,?,?,?,?,?)",
             (
                 now.isoformat(timespec="seconds"),
-                now.strftime("%Y-%m-%d"),
+                provider_day(provider, now),
                 provider,
                 model,
                 profile,
@@ -265,18 +312,19 @@ def _seconds_until(iso: str | None) -> float | None:
 
 
 def today_usage() -> dict[tuple[str, str], dict]:
-    """Consumo de hoje (UTC) por (provedor, modelo)."""
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    """Consumo de hoje por (provedor, modelo) — "hoje" no ciclo de cada provedor."""
+    now = datetime.now(timezone.utc)
     with _lock, _db() as conn:
         rows = conn.execute(
-            "SELECT provider, model,"
+            "SELECT provider, model, day,"
             "       SUM(ok) AS ok_calls,"
             "       COUNT(*) - SUM(ok) AS failed,"
             "       SUM(tokens) AS tokens,"
             "       AVG(CASE WHEN ok=1 THEN latency END) AS avg_latency"
-            " FROM calls WHERE day = ? GROUP BY provider, model",
-            (day,),
+            " FROM calls WHERE day >= ? GROUP BY provider, model, day",
+            ((now - timedelta(days=2)).strftime("%Y-%m-%d"),),
         ).fetchall()
+    rows = [r for r in rows if r["day"] == provider_day(r["provider"], now)]
     return {
         (r["provider"], r["model"]): {
             "ok_calls": r["ok_calls"] or 0,
@@ -430,6 +478,8 @@ def report() -> list[dict]:
             "active": _active(provider),
             "period": limits.get("period", "day"),
             "daily_reset_in": daily_reset_in(provider),
+            "daily_reset_at": daily_reset_at_local(provider),
+            "cost": getattr(_P.get(provider), "cost", "free"),
             "exhausted": is_exhausted(provider),
             "models": models,
         })

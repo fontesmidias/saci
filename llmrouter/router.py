@@ -33,7 +33,7 @@ from openai import (
     RateLimitError,
 )
 
-from . import prefs
+from . import catalog, prefs
 from . import usage as usage_db
 from .providers import DEFAULT_ORDER, DEFAULT_PROFILE, PROFILES, PROVIDERS, Provider
 
@@ -104,7 +104,11 @@ class LLMRouter:
             )
 
         # `order` restringe a quais provedores usar (útil para --status).
-        self.order = [p for p in (order or DEFAULT_ORDER) if p in PROVIDERS]
+        # Sem `order`, vale LLM_ROUTER_ORDER do .env; sem ele, o padrão.
+        if order is None:
+            raw = (os.getenv("LLM_ROUTER_ORDER") or "").strip()
+            order = [x.strip() for x in raw.split(",") if x.strip()] or DEFAULT_ORDER
+        self.order = [p for p in order if p in PROVIDERS]
         self.timeout = timeout or float(os.getenv("LLM_ROUTER_TIMEOUT") or 60.0)
         self.on_event = on_event or (lambda msg: None)
 
@@ -131,7 +135,7 @@ class LLMRouter:
         ready: list[tuple[Provider, str]] = []
         exhausted: list[tuple[Provider, str]] = []
 
-        for pkey, model in PROFILES[self.profile]:
+        for pkey, model in self._expanded_steps():
             if pkey not in self.order:
                 continue
             provider = PROVIDERS[pkey]
@@ -157,6 +161,38 @@ class LLMRouter:
             self.on_event(f"[fixado] {forced[0][0].label} / {forced[0][1]}")
             return forced + rest
         return ordered
+
+    def _expanded_steps(self) -> list[tuple[str, str]]:
+        """
+        Os passos do perfil, com duas expansões:
+
+        1. (provedor, None) vira os 2 melhores modelos verificados desse
+           provedor pelo catálogo automático (os mais rápidos primeiro).
+        2. Todo provedor da ordem configurada que o perfil não cita entra
+           no fim, também via catálogo. É o que faz um provedor recém
+           configurado participar sem ninguém editar os perfis.
+        """
+        steps: list[tuple[str, str]] = []
+        seen_prov: set[str] = set()
+
+        def add(pkey: str, model: str | None) -> None:
+            if model is not None:
+                if (pkey, model) not in steps:
+                    steps.append((pkey, model))
+                return
+            for m in catalog.verified_models(pkey, limit=2):
+                if (pkey, m) not in steps:
+                    steps.append((pkey, m))
+
+        for pkey, model in PROFILES[self.profile]:
+            seen_prov.add(pkey)
+            add(pkey, model)
+
+        for pkey in self.order:  # cauda genérica, na ordem do usuário
+            if pkey in seen_prov or pkey not in PROVIDERS:
+                continue
+            add(pkey, None)
+        return steps
 
     def available(self) -> list[Provider]:
         """Provedores com chave preenchida, na ordem configurada."""

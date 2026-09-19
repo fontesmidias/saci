@@ -23,6 +23,7 @@ class Provider:
     base_url: str
     models: list[str] = field(default_factory=list)
     notes: str = ""
+    cost: str = "free"   # "free" | "credits" (gasta saldo pré-pago)
 
 
 # ---------------------------------------------------------------------
@@ -98,34 +99,25 @@ PROVIDERS: dict[str, Provider] = {
         label="SambaNova",
         env="SAMBANOVA_API_KEY",
         base_url="https://api.sambanova.ai/v1",
-        models=["Meta-Llama-3.3-70B-Instruct", "DeepSeek-R1"],
-        notes="Free tier sem cartão (30 RPM). Precisa de chave: cloud.sambanova.ai",
+        models=[],   # vem do catálogo automático
+        notes="Free tier sem cartão (30 RPM). Chave: cloud.sambanova.ai",
     ),
     "hyperbolic": Provider(
         key="hyperbolic",
         label="Hyperbolic",
         env="HYPERBOLIC_API_KEY",
         base_url="https://api.hyperbolic.xyz/v1",
-        models=["deepseek-ai/DeepSeek-V3", "Qwen/Qwen2.5-72B-Instruct"],
-        notes="60 RPM grátis em modelos abertos. Chave: app.hyperbolic.xyz",
-    ),
-    "siliconflow": Provider(
-        key="siliconflow",
-        label="SiliconFlow",
-        env="SILICONFLOW_API_KEY",
-        base_url="https://api.siliconflow.cn/v1",
-        models=["Qwen/Qwen2.5-7B-Instruct", "THUDM/glm-4-9b-chat"],
-        notes="Modelos 7B/9B grátis permanentes + 20M tokens de bônus. "
-              "Chave: siliconflow.cn",
+        models=[],   # vem do catálogo automático
+        notes="US$ 1 de crédito na verificação do telefone — gasta saldo, não é free tier.",
+        cost="credits",
     ),
     "huggingface": Provider(
         key="huggingface",
         label="HuggingFace",
         env="HF_API_KEY",
         base_url="https://router.huggingface.co/v1",
-        models=["meta-llama/Llama-3.3-70B-Instruct"],
-        notes="Inferência serverless em milhares de modelos abertos. "
-              "Token: huggingface.co/settings/tokens",
+        models=[],   # vem do catálogo automático
+        notes="Serverless em modelos abertos. Token: huggingface.co/settings/tokens",
     ),
 }
 
@@ -136,7 +128,10 @@ PROVIDERS: dict[str, Provider] = {
 # modelos de maior capacidade que ainda respondem rápido.
 # ---------------------------------------------------------------------
 
-PROFILES: dict[str, list[tuple[str, str]]] = {
+# Uma entrada (provedor, None) significa "os melhores modelos verificados
+# desse provedor pelo catálogo automático". É assim que um provedor novo
+# entra na cascata sem ninguém listar modelo nenhum à mão.
+PROFILES: dict[str, list[tuple[str, str | None]]] = {
     # Gerar/refatorar código. Verificados: gpt-oss-120b 0.98s, codestral 2.20s.
     "code": [
         ("groq", "openai/gpt-oss-120b"),
@@ -195,6 +190,7 @@ PROFILES: dict[str, list[tuple[str, str]]] = {
 }
 
 DEFAULT_PROFILE = "fast"
-DEFAULT_ORDER = ["groq", "google", "mistral", "nvidia", "openrouter",
-                 "llm7", "cerebras", "sambanova", "hyperbolic",
-                 "siliconflow", "huggingface"]
+# Ordem da cauda genérica: grátis primeiro, depois quem gasta crédito,
+# por último o keyless instável. Provedores sem chave são pulados.
+DEFAULT_ORDER = ["groq", "google", "mistral", "nvidia", "sambanova",
+                 "huggingface", "openrouter", "cerebras", "hyperbolic", "llm7"]

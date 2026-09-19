@@ -49,6 +49,37 @@ from llmrouter.providers import PROFILES  # noqa: E402
 
 app = FastAPI(title="LLM Router", version="0.1.0")
 
+CATALOG_EVERY_MIN = 60   # descoberta é 1 GET por provedor; sondagem só do que for devido
+
+
+def _log(msg: str) -> None:
+    print(msg, file=sys.stderr, flush=True)
+
+
+def _catalog_loop() -> None:
+    """Na inicialização e a cada hora: descobre modelos e sonda os novos."""
+    import threading
+    import time as _t
+
+    from llmrouter import catalog
+
+    while True:
+        try:
+            _log("[catálogo] verificação iniciada")
+            for s in catalog.refresh_all(on_event=_log):
+                _log(f"[catálogo] {s['provider']}: {s['ok']} ok de {s['chat']} de chat"
+                     + (f" — {s['error']}" if s.get("error") else ""))
+            _log("[catálogo] verificação concluída")
+        except Exception as exc:  # nunca derruba o servidor
+            _log(f"[catálogo] falhou: {type(exc).__name__}: {exc}")
+        _t.sleep(CATALOG_EVERY_MIN * 60)
+
+
+@app.on_event("startup")
+def _start_catalog() -> None:
+    import threading
+    threading.Thread(target=_catalog_loop, name="catalog", daemon=True).start()
+
 MODEL_PREFIX = "router-"
 
 
@@ -263,11 +294,22 @@ def get_prefs() -> dict:
         }
         for name, steps in PROFILES.items()
     ]
+    from llmrouter import catalog
+    snap = catalog.snapshot()
+    verified = {
+        k: [
+            {"model": m["model"], "latency_ms": m["latency_ms"], "context": m["context"]}
+            for m in v if m["status"] == "ok"
+        ]
+        for k, v in snap["models"].items()
+    }
     return {
         "profile": current.get("profile"),
         "pin": current.get("pin"),
         "profiles": options,
         "env_profile": os.getenv("LLM_ROUTER_PROFILE"),
+        "verified": verified,
+        "cost": {k: p.cost for k, p in PROVIDERS.items()},
     }
 
 
@@ -288,6 +330,45 @@ def set_prefs(update: PrefsUpdate) -> dict:
     saved = prefs.save(**changes) if changes else prefs.load()
     print(f"\n-> prefs: {saved}", file=sys.stderr, flush=True)
     return saved
+
+
+@app.get("/catalog")
+def get_catalog() -> dict:
+    """Modelos descobertos por provedor, com veredito (ok/pago/removido/…)."""
+    from llmrouter import catalog
+    from llmrouter.providers import PROVIDERS
+
+    snap = catalog.snapshot()
+    return {
+        "providers": {
+            k: {
+                "label": PROVIDERS[k].label if k in PROVIDERS else k,
+                "cost": getattr(PROVIDERS.get(k), "cost", "free"),
+                "models": v,
+                "last_run": snap["last_run"].get(k),
+            }
+            for k, v in snap["models"].items()
+        },
+        "last_refresh_at": catalog.last_refresh_at(),
+    }
+
+
+@app.post("/catalog/refresh")
+def refresh_catalog() -> dict:
+    """Dispara uma verificação agora, em segundo plano."""
+    import threading
+
+    from llmrouter import catalog
+
+    def run() -> None:
+        try:
+            for s in catalog.refresh_all(on_event=_log):
+                _log(f"[catálogo] {s['provider']}: {s['ok']} ok")
+        except Exception as exc:
+            _log(f"[catálogo] falhou: {exc}")
+
+    threading.Thread(target=run, name="catalog-manual", daemon=True).start()
+    return {"started": True}
 
 
 @app.get("/dashboard", response_class=HTMLResponse)

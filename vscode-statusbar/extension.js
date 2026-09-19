@@ -1,10 +1,10 @@
-// Extensão local: consumo de cota na barra de status + seletor de perfil.
+// Extensão local: consumo de cota na barra de status + seletor de modelo.
 //
-// Barra:   ⚡ groq 1% · 4h39m
-//          (provedor ativo, % da cota diária, quando reseta)
+// Barra:   ⚡ groq 1% · 21:00
+//          (provedor ativo, % da cota diária, hora em que ela reseta)
 //
-// Clique:  menu para trocar de perfil ou fixar um modelo — como o
-//          seletor de modelo do Claude Code.
+// Clique:  menu para trocar de perfil ou fixar um modelo verificado pelo
+//          catálogo automático — como o seletor de modelo do Claude Code.
 
 const vscode = require("vscode");
 
@@ -19,13 +19,14 @@ function cfg() {
 }
 
 async function api(path, options) {
-  const res = await fetch(`${cfg().url}${path}`, {
-    signal: AbortSignal.timeout(5000),
-    ...options,
-  });
+  const res = await fetch(`${cfg().url}${path}`, { signal: AbortSignal.timeout(5000), ...options });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+const postJson = (path, body) => api(path, {
+  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+});
 
 function human(secs) {
   if (secs == null) return null;
@@ -40,21 +41,15 @@ function human(secs) {
 async function refresh() {
   try {
     const [u, p] = await Promise.all([api("/usage"), api("/prefs")]);
+    const live = u.providers.filter(x => x.active && !x.exhausted);
+    const active = live[0] || u.providers.find(x => x.active);
+    if (!active) throw new Error("sem provedor");
 
-    // O provedor "ativo" é o primeiro da cascata com cota sobrando.
-    const live = u.providers.filter(x => !x.exhausted);
-    const active = live[0] || u.providers[0];
-    if (!active) throw new Error("sem dados");
-
-    const pct = active.rpd_limit
-      ? 100 * active.calls_today / active.rpd_limit
-      : 0;
-    const reset = human(active.daily_reset_in);
+    const pct = active.rpd_limit ? 100 * active.calls_today / active.rpd_limit : 0;
+    const when = active.daily_reset_at || human(active.daily_reset_in);
     const pinned = p.pin ? "$(pin) " : "";
 
-    item.text = `${pinned}$(zap) ${active.provider} ${pct.toFixed(0)}%` +
-                (reset ? ` · ${reset}` : "");
-
+    item.text = `${pinned}$(zap) ${active.provider} ${pct.toFixed(0)}%` + (when ? ` · ${when}` : "");
     item.backgroundColor =
       pct >= 90 ? new vscode.ThemeColor("statusBarItem.errorBackground")
       : pct >= 70 ? new vscode.ThemeColor("statusBarItem.warningBackground")
@@ -62,14 +57,12 @@ async function refresh() {
 
     const calls = u.providers.reduce((a, x) => a + x.calls_today, 0);
     const toks = u.providers.reduce((a, x) => a + x.tokens_today, 0);
-    const lines = u.providers
-      .filter(x => x.rpd_limit)
-      .map(x => {
-        const q = `${x.calls_today}/${x.rpd_limit}`;
-        const r = human(x.daily_reset_in);
-        const flag = x.exhausted ? " ⛔" : "";
-        return `- \`${x.provider}\` ${q} · reseta em ${r}${flag}`;
-      });
+    const lines = u.providers.filter(x => x.active).map(x => {
+      const q = x.rpd_limit ? `${x.calls_today}/${x.rpd_limit}` : `${x.calls_today} chamadas`;
+      const r = x.daily_reset_at ? ` · reseta às ${x.daily_reset_at}` : "";
+      const flag = (x.exhausted ? " ⛔" : "") + (x.cost === "credits" ? " 💳" : "");
+      return `- \`${x.provider}\` ${q}${r}${flag}`;
+    });
 
     const md = new vscode.MarkdownString(
       `**LLM Router** — perfil \`${p.profile || "auto"}\`\n\n` +
@@ -87,81 +80,64 @@ async function refresh() {
   }
 }
 
-// Menu de troca — o equivalente ao seletor de modelo do Claude Code.
+// O seletor — perfis primeiro, depois todo modelo que o catálogo julgou OK.
 async function pickMenu() {
-  let u, p;
+  let p;
   try {
-    [u, p] = await Promise.all([api("/usage"), api("/prefs")]);
+    p = await api("/prefs");
   } catch {
-    const go = await vscode.window.showErrorMessage(
-      "Servidor do LLM Router nao responde.", "Abrir painel"
-    );
+    const go = await vscode.window.showErrorMessage("Servidor do LLM Router nao responde.", "Abrir painel");
     if (go) openDashboard();
     return;
   }
 
   const items = [];
-
   items.push({ label: "Perfis", kind: vscode.QuickPickItemKind.Separator });
   items.push({
     label: `${!p.profile ? "$(check) " : ""}auto`,
     description: "usa o perfil que a requisicao pedir",
-    action: () => api("/prefs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ profile: "" }),
-    }),
+    action: () => postJson("/prefs", { profile: "" }),
   });
   for (const prof of p.profiles) {
     const first = prof.steps[0];
     items.push({
       label: `${p.profile === prof.profile ? "$(check) " : ""}${prof.profile}`,
-      description: first ? `${first.label} · ${first.model}` : "",
-      action: () => api("/prefs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile: prof.profile }),
-      }),
+      description: first ? `${first.label} · ${first.model || "melhor verificado"}` : "",
+      action: () => postJson("/prefs", { profile: prof.profile }),
     });
   }
 
-  // Fixar um modelo específico, ignorando a ordem da cascata.
-  items.push({ label: "Fixar um modelo", kind: vscode.QuickPickItemKind.Separator });
+  items.push({ label: "Fixar um modelo verificado", kind: vscode.QuickPickItemKind.Separator });
   if (p.pin) {
     items.push({
       label: "$(close) soltar modelo fixado",
       description: `${p.pin.provider}/${p.pin.model}`,
-      action: () => api("/prefs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clear_pin: true }),
-      }),
+      action: () => postJson("/prefs", { clear_pin: true }),
     });
   }
-  for (const prov of u.providers) {
-    for (const m of prov.models) {
-      const isPin = p.pin && p.pin.provider === prov.provider && p.pin.model === m.model;
+  for (const [prov, models] of Object.entries(p.verified || {})) {
+    const credit = (p.cost || {})[prov] === "credits" ? " 💳 gasta crédito" : "";
+    for (const m of models) {
+      const isPin = p.pin && p.pin.provider === prov && p.pin.model === m.model;
       const bits = [];
-      if (m.exhausted) bits.push("sem cota");
-      if (m.avg_latency) bits.push(`${m.avg_latency}s`);
+      if (m.latency_ms) bits.push(`${(m.latency_ms / 1000).toFixed(1)}s`);
+      if (m.context) bits.push(`${Math.round(m.context / 1000)}k ctx`);
       items.push({
-        label: `${isPin ? "$(pin) " : ""}${prov.provider} · ${m.model}`,
-        description: bits.join(" · "),
-        action: () => api("/prefs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pin_provider: prov.provider, pin_model: m.model }),
-        }),
+        label: `${isPin ? "$(pin) " : ""}${prov} · ${m.model}`,
+        description: bits.join(" · ") + credit,
+        action: () => postJson("/prefs", { pin_provider: prov, pin_model: m.model }),
       });
     }
   }
 
   items.push({ label: "", kind: vscode.QuickPickItemKind.Separator });
+  items.push({ label: "$(sync) verificar catálogo agora", action: () => postJson("/catalog/refresh", {}) });
   items.push({ label: "$(graph) abrir painel completo", action: openDashboard });
 
   const choice = await vscode.window.showQuickPick(items, {
     title: "LLM Router",
     placeHolder: "Escolha o perfil ou fixe um modelo",
+    matchOnDescription: true,
   });
   if (choice?.action) {
     await choice.action();
@@ -183,11 +159,8 @@ function activate(context) {
     item,
     vscode.commands.registerCommand("llmRouter.pick", pickMenu),
     vscode.commands.registerCommand("llmRouter.openDashboard", openDashboard),
-    vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration("llmRouter")) start();
-    })
+    vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration("llmRouter")) start(); })
   );
-
   start();
 }
 
@@ -197,8 +170,6 @@ function start() {
   timer = setInterval(refresh, cfg().refresh * 1000);
 }
 
-function deactivate() {
-  if (timer) clearInterval(timer);
-}
+function deactivate() { if (timer) clearInterval(timer); }
 
 module.exports = { activate, deactivate };
