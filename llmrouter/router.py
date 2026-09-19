@@ -119,13 +119,16 @@ class LLMRouter:
             if not (os.getenv(provider.env) or "").strip():
                 continue
 
-            if self.skip_exhausted and usage_db.is_exhausted(pkey):
+            # Por MODELO, nao por provedor: no Groq os tokens sao contados
+            # por modelo, entao gpt-oss-20b pode estar livre enquanto o
+            # 120b esta no limite. Pular o provedor inteiro desperdicaria cota.
+            if self.skip_exhausted and usage_db.is_exhausted(pkey, model):
                 exhausted.append((provider, model))
             else:
                 ready.append((provider, model))
 
         if exhausted and ready:
-            names = {p.label for p, _ in exhausted}
+            names = {f"{p.label}/{m.split('/')[-1]}" for p, m in exhausted}
             self.on_event(f"[cota] adiando: {', '.join(sorted(names))}")
 
         return ready + exhausted
@@ -220,7 +223,7 @@ class LLMRouter:
                     temperature=temperature,
                 )
                 try:
-                    usage_db.record_quota_headers(provider.key, raw.headers)
+                    usage_db.record_quota_headers(provider.key, model, raw.headers)
                 except Exception:
                     pass  # contabilidade nunca derruba a chamada
 

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM Router</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --text: #e6edf3; --dim: #8b949e;
+    --ok: #3fb950; --warn: #d29922; --bad: #f85149; --accent: #58a6ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #ffffff; --panel: #f6f8fa; --border: #d0d7de;
+      --text: #1f2328; --dim: #656d76;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px; background: var(--bg); color: var(--text);
+    font: 13px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  h1 { font-size: 15px; margin: 0 0 2px; font-weight: 600; }
+  .sub { color: var(--dim); font-size: 11px; margin-bottom: 14px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px; margin-bottom: 10px;
+  }
+  .phead { display: flex; justify-content: space-between; align-items: baseline;
+           margin-bottom: 10px; gap: 8px; flex-wrap: wrap; }
+  .pname { font-weight: 600; font-size: 14px; }
+  .tag { font-size: 10px; padding: 1px 6px; border-radius: 9px;
+         border: 1px solid var(--border); color: var(--dim); }
+  .tag.official { color: var(--ok); border-color: var(--ok); }
+  .tag.est { color: var(--warn); border-color: var(--warn); }
+  .tag.out { color: var(--bad); border-color: var(--bad); }
+  .model { margin: 9px 0; padding-left: 8px; border-left: 2px solid var(--border); }
+  .model.dead { border-left-color: var(--bad); opacity: .65; }
+  .mname { font-size: 12px; margin-bottom: 4px; display: flex;
+           justify-content: space-between; gap: 8px; }
+  .muted { color: var(--dim); font-size: 11px; }
+  .row { display: flex; align-items: center; gap: 7px; margin: 3px 0; font-size: 11px; }
+  .label { color: var(--dim); width: 42px; flex-shrink: 0; }
+  .bar { flex: 1; height: 7px; background: var(--border);
+         border-radius: 4px; overflow: hidden; min-width: 60px; }
+  .fill { height: 100%; background: var(--ok); transition: width .4s, background .4s; }
+  .fill.warn { background: var(--warn); }
+  .fill.bad { background: var(--bad); }
+  .val { width: 108px; text-align: right; color: var(--dim); flex-shrink: 0; }
+  .cd { color: var(--accent); width: 60px; text-align: right; flex-shrink: 0; }
+  .cd.soon { color: var(--ok); }
+  .foot { display: flex; justify-content: space-between; color: var(--dim);
+          font-size: 11px; margin-top: 12px; flex-wrap: wrap; gap: 8px; }
+  .empty { color: var(--dim); font-style: italic; font-size: 11px; }
+  @media (max-width: 420px) { .val { width: 86px; } }
+</style>
+</head>
+<body>
+  <h1>LLM Router</h1>
+  <div class="sub" id="summary">carregando…</div>
+  <div id="providers"></div>
+  <div class="foot">
+    <span id="host"></span>
+    <span id="updated"></span>
+  </div>
+
+<script>
+// Estado global: os dados do servidor e o instante em que chegaram.
+// A contagem regressiva roda localmente a cada segundo, para não
+// martelar o servidor — só recarregamos os dados a cada 10s.
+let DATA = null, FETCHED_AT = 0;
+
+const fmt = n => n == null ? "-" : n.toLocaleString("pt-BR");
+
+function countdown(secs) {
+  if (secs == null) return "";
+  // Desconta o tempo passado desde que o servidor respondeu.
+  const left = Math.max(0, secs - (Date.now() - FETCHED_AT) / 1000);
+  if (left <= 0.5) return "pronto";
+  if (left < 60) return left.toFixed(0) + "s";
+  const m = Math.floor(left / 60), s = Math.floor(left % 60);
+  if (m < 60) return `${m}m${String(s).padStart(2, "0")}s`;
+  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m`;
+}
+
+function bar(used, limit) {
+  if (!limit) return null;
+  const pct = Math.min(100, Math.max(0, 100 * used / limit));
+  const cls = pct >= 90 ? "bad" : pct >= 70 ? "warn" : "";
+  return { pct, cls };
+}
+
+function rowHTML(label, used, limit, resetSecs) {
+  const b = bar(used, limit);
+  if (!b) return "";
+  const cd = countdown(resetSecs);
+  return `<div class="row">
+    <span class="label">${label}</span>
+    <span class="bar"><span class="fill ${b.cls}" style="width:${b.pct}%"></span></span>
+    <span class="val">${fmt(used)}/${fmt(limit)}</span>
+    <span class="cd ${cd === "pronto" ? "soon" : ""}" data-reset="${resetSecs ?? ""}">${cd}</span>
+  </div>`;
+}
+
+function render() {
+  if (!DATA) return;
+  const box = document.getElementById("providers");
+  let totalCalls = 0, totalTokens = 0, totalFail = 0;
+
+  box.innerHTML = DATA.providers.map(p => {
+    totalCalls += p.calls_today;
+    totalTokens += p.tokens_today;
+    totalFail += p.failed_today;
+
+    const srcTag = p.source === "local"
+      ? '<span class="tag est">estimado</span>'
+      : '<span class="tag official">oficial</span>';
+    const outTag = p.exhausted ? '<span class="tag out">sem cota</span>' : "";
+
+    let body;
+    if (!p.models.length) {
+      body = p.rpd_limit
+        ? rowHTML("dia", p.calls_today, p.rpd_limit, null)
+        : '<div class="empty">sem uso hoje</div>';
+    } else {
+      body = p.models.map(m => {
+        const reqRow = rowHTML("req", (m.limit_requests ?? 0) - (m.remaining_requests ?? 0),
+                               m.limit_requests, m.reset_requests_in);
+        const tokRow = rowHTML("tok", (m.limit_tokens ?? 0) - (m.remaining_tokens ?? 0),
+                               m.limit_tokens, m.reset_tokens_in);
+        const lat = m.avg_latency ? ` · ${m.avg_latency}s` : "";
+        const stats = m.calls || m.failed
+          ? `${m.calls} chamadas · ${fmt(m.tokens)} tok${lat}${m.failed ? ` · ${m.failed} falhas` : ""}`
+          : "sem uso hoje";
+        return `<div class="model ${m.exhausted ? "dead" : ""}">
+          <div class="mname"><span>${m.model}</span><span class="muted">${stats}</span></div>
+          ${reqRow}${tokRow}
+        </div>`;
+      }).join("");
+    }
+
+    return `<div class="card">
+      <div class="phead">
+        <span class="pname">${p.provider}</span>
+        <span>${outTag} ${srcTag}</span>
+      </div>
+      ${body}
+    </div>`;
+  }).join("");
+
+  const s = DATA.system || {};
+  document.getElementById("summary").textContent =
+    `${totalCalls} chamadas hoje · ${fmt(totalTokens)} tokens` +
+    (totalFail ? ` · ${totalFail} falhas` : "");
+  document.getElementById("host").textContent =
+    s.server_ram_mb ? `servidor ${s.server_ram_mb} MB · RAM livre ${fmt(s.free_ram_mb)} MB` : "";
+  document.getElementById("updated").textContent =
+    "atualizado " + new Date().toLocaleTimeString("pt-BR");
+}
+
+// Atualiza só os contadores, sem redesenhar tudo (evita piscar).
+function tick() {
+  document.querySelectorAll(".cd").forEach(el => {
+    const v = el.dataset.reset;
+    if (v === "") return;
+    const txt = countdown(parseFloat(v));
+    el.textContent = txt;
+    el.classList.toggle("soon", txt === "pronto");
+  });
+}
+
+async function load() {
+  try {
+    const r = await fetch("/usage");
+    DATA = await r.json();
+    FETCHED_AT = Date.now();
+    render();
+  } catch (e) {
+    document.getElementById("summary").textContent = "servidor offline";
+  }
+}
+
+load();
+setInterval(load, 10000);  // recarrega dados
+setInterval(tick, 1000);   // conta regressiva local
+</script>
+</body>
+</html>

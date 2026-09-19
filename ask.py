@@ -41,51 +41,73 @@ SYSTEM_PROMPTS = {
 
 
 def cmd_usage() -> int:
-    """Mostra consumo e cota restante por provedor."""
+    """Mostra consumo e cota restante por provedor e por modelo."""
     from llmrouter import usage as usage_db
 
     rows = usage_db.report()
-    print("CONSUMO DE HOJE (UTC)\n")
-    print(f"  {'provedor':11} {'chamadas':>9} {'falhas':>7} {'tokens':>9} {'latencia':>9}  fonte")
-    print(f"  {'-'*11} {'-'*9} {'-'*7} {'-'*9} {'-'*9}  {'-'*8}")
+    total_calls = sum(r["calls_today"] for r in rows)
+    total_tokens = sum(r["tokens_today"] for r in rows)
 
-    any_use = False
+    print(f"CONSUMO DE HOJE (UTC): {total_calls} chamadas, {_mil(total_tokens)} tokens\n")
+
     for r in rows:
-        if r["calls_today"] or r["failed_today"]:
-            any_use = True
-        lat = f"{r['avg_latency']}s" if r["avg_latency"] else "-"
-        print(
-            f"  {r['provider']:11} {r['calls_today']:>9} {r['failed_today']:>7} "
-            f"{r['tokens_today']:>9} {lat:>9}  {r['source']}"
-        )
+        if not r["models"] and not r["calls_today"]:
+            continue
 
-    if not any_use:
-        print("\n  (nenhuma chamada registrada hoje)")
+        tag = "[oficial]" if r["source"] in ("headers", "endpoint") else "[estimado]"
+        out = "  SEM COTA" if r["exhausted"] else ""
+        print(f"{r['provider'].upper()}  {tag}{out}")
 
-    print("\n\nCOTA RESTANTE\n")
-    for r in rows:
-        name = r["provider"]
-        if r["remaining_requests"] is not None:
-            # Dado oficial do provedor.
-            used = (r["limit_requests"] or 0) - r["remaining_requests"]
-            pct = 100 * used / r["limit_requests"] if r["limit_requests"] else 0
-            bar = _bar(pct)
-            reset = f" | reset em {r['reset_requests']}" if r["reset_requests"] else ""
-            print(f"  {name:11} {bar} {used}/{r['limit_requests']} req  [oficial]{reset}")
-            if r["remaining_tokens"] is not None and r["limit_tokens"]:
-                tused = r["limit_tokens"] - r["remaining_tokens"]
-                print(f"  {'':11} {_bar(100*tused/r['limit_tokens'])} "
-                      f"{tused}/{r['limit_tokens']} tokens")
-        elif r["rpd_limit"]:
-            # Estimativa nossa, por contagem local.
-            pct = r["rpd_used_pct"] or 0
-            print(f"  {name:11} {_bar(pct)} {r['calls_today']}/{r['rpd_limit']} req/dia  [estimado]")
-        else:
-            print(f"  {name:11} (sem limite conhecido)")
+        if not r["models"]:
+            if r["rpd_limit"]:
+                pct = r["rpd_used_pct"] or 0
+                print(f"  {_bar(pct)} {r['calls_today']}/{r['rpd_limit']} req/dia")
+            print()
+            continue
 
-    print("\n  [oficial]  = lido dos headers do provedor")
+        for m in r["models"]:
+            mark = " [sem cota]" if m["exhausted"] else ""
+            stats = f"{m['calls']} chamadas, {_mil(m['tokens'])} tok"
+            if m["avg_latency"]:
+                stats += f", {m['avg_latency']}s"
+            print(f"  {m['model']}{mark}  ({stats})")
+
+            if m["limit_requests"]:
+                used = m["limit_requests"] - (m["remaining_requests"] or 0)
+                pct = 100 * used / m["limit_requests"]
+                cd = _countdown(m["reset_requests_in"])
+                print(f"    req  {_bar(pct)} {used}/{m['limit_requests']}{cd}")
+
+            if m["limit_tokens"]:
+                used = m["limit_tokens"] - (m["remaining_tokens"] or 0)
+                pct = 100 * used / m["limit_tokens"]
+                cd = _countdown(m["reset_tokens_in"])
+                print(f"    tok  {_bar(pct)} {_mil(used)}/{_mil(m['limit_tokens'])}{cd}")
+        print()
+
+    if not total_calls:
+        print("  (nenhuma chamada registrada hoje)\n")
+
+    print("  [oficial]  = lido dos headers do provedor")
     print("  [estimado] = nossa contagem local (provedor nao informa)")
+    print("\n  Painel visual: http://127.0.0.1:8000/dashboard")
     return 0
+
+
+def _mil(n) -> str:
+    """Formata numero com ponto de milhar (pt-BR)."""
+    return f"{n:,}".replace(",", ".")
+
+
+def _countdown(secs) -> str:
+    """Formata o tempo que falta para a cota resetar."""
+    if secs is None:
+        return ""
+    if secs <= 0.5:
+        return "  reset: pronto"
+    if secs < 60:
+        return f"  reset em {secs:.0f}s"
+    return f"  reset em {int(secs // 60)}m{int(secs % 60):02d}s"
 
 
 def _bar(pct: float, width: int = 20) -> str:

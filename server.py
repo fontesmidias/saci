@@ -32,10 +32,11 @@ import json
 import sys
 import time
 import uuid
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 for _stream in (sys.stdout, sys.stderr):
@@ -132,16 +133,117 @@ def health() -> dict:
     return {"status": "ok", "profiles": list(PROFILES)}
 
 
+def _system_stats() -> dict:
+    """RAM do servidor e da máquina — para você saber se pesa no PC."""
+    stats: dict = {}
+    try:
+        import resource  # POSIX
+        stats["server_ram_mb"] = round(
+            resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1
+        )
+    except Exception:
+        try:  # Windows
+            import ctypes
+
+            class MEM(ctypes.Structure):
+                _fields_ = [
+                    ("cb", ctypes.c_ulong), ("PageFaultCount", ctypes.c_ulong),
+                    ("PeakWorkingSetSize", ctypes.c_size_t),
+                    ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t),
+                    ("PeakPagefileUsage", ctypes.c_size_t),
+                ]
+
+            counters = MEM()
+            counters.cb = ctypes.sizeof(MEM)
+            ctypes.windll.psapi.GetProcessMemoryInfo(
+                ctypes.windll.kernel32.GetCurrentProcess(),
+                ctypes.byref(counters), counters.cb,
+            )
+            stats["server_ram_mb"] = round(counters.WorkingSetSize / 1048576, 1)
+
+            class MEMSTAT(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            mem = MEMSTAT()
+            mem.dwLength = ctypes.sizeof(MEMSTAT)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(mem))
+            stats["free_ram_mb"] = round(mem.ullAvailPhys / 1048576)
+            stats["total_ram_mb"] = round(mem.ullTotalPhys / 1048576)
+        except Exception:
+            pass
+    return stats
+
+
 @app.get("/usage")
 def usage_report() -> dict:
-    """Consumo e cota por provedor. Abra no navegador: http://127.0.0.1:8000/usage"""
+    """Consumo e cota por (provedor, modelo). JSON que alimenta o painel."""
     from llmrouter import usage as usage_db
 
     rows = usage_db.report()
     return {
         "providers": rows,
-        "exhausted": [r["provider"] for r in rows if usage_db.is_exhausted(r["provider"])],
+        "exhausted": [r["provider"] for r in rows if r["exhausted"]],
+        "system": _system_stats(),
     }
+
+
+@app.get("/status")
+def status_line() -> dict:
+    """
+    Resumo enxuto para a barra de status do VSCode.
+
+    Devolve o provedor em uso, quanto da cota foi gasta e quando reseta.
+    """
+    from llmrouter import usage as usage_db
+
+    rows = usage_db.report()
+    calls = sum(r["calls_today"] for r in rows)
+    tokens = sum(r["tokens_today"] for r in rows)
+
+    # O provedor "ativo" é o primeiro da cascata que ainda tem cota.
+    active, pct, reset = None, None, None
+    for r in rows:
+        for m in r["models"]:
+            if m["exhausted"]:
+                continue
+            if m["limit_tokens"] and m["remaining_tokens"] is not None:
+                used_pct = 100 * (1 - m["remaining_tokens"] / m["limit_tokens"])
+                if active is None or used_pct < pct:
+                    active, pct = r["provider"], used_pct
+                    reset = m["reset_tokens_in"]
+        if active:
+            break
+
+    return {
+        "active": active,
+        "used_pct": round(pct, 1) if pct is not None else None,
+        "reset_in": reset,
+        "calls_today": calls,
+        "tokens_today": tokens,
+        "exhausted": [r["provider"] for r in rows if r["exhausted"]],
+    }
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard() -> str:
+    """Painel visual. Abra no navegador ou no Simple Browser do VSCode."""
+    return (Path(__file__).parent / "llmrouter" / "dashboard.html").read_text(
+        encoding="utf-8"
+    )
 
 
 @app.post("/v1/chat/completions")

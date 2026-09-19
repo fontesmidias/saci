@@ -1,0 +1,34 @@
+{
+  "name": "llm-router-status",
+  "displayName": "LLM Router Status",
+  "description": "Mostra consumo de cota dos provedores de LLM na barra de status",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "llmRouter.openDashboard",
+        "title": "LLM Router: abrir painel de consumo"
+      }
+    ],
+    "configuration": {
+      "title": "LLM Router",
+      "properties": {
+        "llmRouter.serverUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8000",
+          "description": "URL do servidor do LLM Router"
+        },
+        "llmRouter.refreshSeconds": {
+          "type": "number",
+          "default": 15,
+          "description": "Intervalo de atualizacao da barra de status, em segundos"
+        }
+      }
+    }
+  }
+}
