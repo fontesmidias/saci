@@ -194,13 +194,18 @@ def fetch_catalog(provider: Provider) -> tuple[list[dict], str | None]:
 # 3. SONDAR
 # ---------------------------------------------------------------------
 
-def probe(provider: Provider, model: str) -> tuple[str, str, int | None]:
+def probe(provider: Provider, model: str, *, key: str | None = None) -> tuple[str, str, int | None]:
     """
     Uma chamada mínima. Retorna (status, detalhe, latência_ms).
 
     Só a saída é lida; a chave nunca entra no detalhe.
+
+    `key` permite testar uma chave que ainda NÃO foi salva no .env — é o
+    que a tela de configurações usa no botão "testar" antes de gravar.
+    Sem ela, lê a chave já configurada (comportamento de sempre).
     """
-    key = _api_key(provider)
+    if key is None:
+        key = _api_key(provider)
     url = provider.base_url.rstrip("/") + "/chat/completions"
     body = {"model": model, "messages": PROBE_PROMPT, "max_tokens": PROBE_MAX_TOKENS}
     t0 = time.perf_counter()

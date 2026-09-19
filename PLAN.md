@@ -99,23 +99,47 @@ cada mudança de schema futura, apagando cota ou catálogo sem aviso.
 `migrations.py`, aditiva ou com `RENAME` em vez de `DROP`. Documentado em
 CONTRIBUTING.md e CONTRIBUTING.pt-BR.md.
 
-## Etapa 3 — Tela de configurações (`saci/settings.html` + endpoints)
+## Etapa 3 — Tela de configurações (`saci/settings.html` + endpoints) ✅ concluída
 
 O que hoje exige editar `.env` na mão.
 
-- [ ] `GET /settings` — página servida pelo mesmo FastAPI, visual do dashboard
-- [ ] `GET /api/settings` — devolve, **por provedor**: rótulo, se tem chave
-      (booleano — **nunca o valor**), link para obter a chave, custo
-      (`free`/`credits`), e os campos `LLM_ROUTER_*`
-- [ ] `POST /api/settings` — grava chave, ordem da cascata, fuso, perfil padrão
-- [ ] `POST /api/settings/test` — testa **uma** chave na hora e devolve
-      ok/erro; dispara a sondagem do catálogo daquele provedor se passou
-- [ ] Gravação segura: escreve em `.env.tmp` e renomeia (não corrompe se cair)
-- [ ] A página mostra a chave mascarada (`gsk_••••4f2a`), com botão "substituir"
+- [x] `GET /settings` — página servida pelo mesmo FastAPI, visual do dashboard
+- [x] `GET /api/settings` — devolve, **por provedor**: rótulo, se tem chave
+      (booleano — **nunca o valor**), link para obter a chave (via `env_var`
+      + notas), custo (`free`/`credits`), e os campos `LLM_ROUTER_*`
+      (`runtime_prefs()`)
+- [x] `POST /api/settings/key` — grava (ou apaga, com valor vazio) a chave
+      de um provedor; `POST /api/settings/runtime` — grava ordem da
+      cascata, fuso, perfil padrão
+- [x] `POST /api/settings/test` — testa **uma** chave na hora, SEM salvar
+      (aceita a chave como parâmetro, não lê do ambiente); ao salvar de
+      verdade, dispara a sondagem do catálogo daquele provedor em thread
+      separada, sem bloquear a resposta
+- [x] Gravação segura: `dotenv.set_key` já escreve em arquivo temporário e
+      substitui com `os.replace` (atômico) — confirmado lendo o código-fonte
+      da biblioteca, não reimplementado à mão
+- [x] A página mostra a chave mascarada (`gsk_••••4f2a`), com botão
+      "substituir" que vira um campo de edição, e "remover"
 
-**Cuidado:** este endpoint escreve segredos. Ele só pode existir enquanto o
-servidor estiver em `127.0.0.1`; se um dia houver modo rede, `/api/settings`
-fica de fora.
+**Verificado, não só a suíte de sempre:**
+- `set_provider_key` preserva comentários e outras chaves do `.env` (testado
+  round-trip com `/`, `+` no valor — caracteres reais de chave)
+- `test_key` com a chave real do Groq em produção: `ok=True` em 364ms; com
+  chave inválida: `status=auth`, e a chave testada não aparece em nenhum
+  lugar da resposta
+- Ciclo completo contra o `.env` de **produção** (não um mock): backup da
+  chave HuggingFace → gravar valor de teste via HTTP → confirmar no
+  `/api/settings` → remover → confirmar `has_key=False` → restaurar o
+  valor original → comparado byte a byte com o backup: idêntico
+- Mesmo teste para `POST /api/settings/runtime` (com `default_profile`)
+- Log revisado depois de toda a bateria: nenhuma chave aparece, nem a
+  testada nem a salva
+- Chamada real de chat (`saci-fast` → Groq) respondida depois de toda a
+  bateria — o servidor não ficou em estado inconsistente
+
+**Cuidado (mantido):** estes endpoints escrevem segredos. Só podem existir
+enquanto o servidor estiver em `127.0.0.1`; se um dia houver modo rede,
+`/api/settings/*` fica de fora.
 
 ## Etapa 4 — Bandeja + janela (`saci/app.py`)
 

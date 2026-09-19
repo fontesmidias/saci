@@ -59,7 +59,7 @@ Changelog = "https://github.com/fontesmidias/saci/blob/main/CHANGELOG.md"
 packages = ["saci"]
 
 [tool.setuptools.package-data]
-saci = ["dashboard.html"]
+saci = ["dashboard.html", "settings.html"]
 
 [tool.ruff]
 line-length = 100

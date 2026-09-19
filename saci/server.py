@@ -387,6 +387,88 @@ def refresh_catalog() -> dict:
     return {"started": True}
 
 
+class KeyUpdate(BaseModel):
+    provider: str
+    value: str
+
+
+class KeyTest(BaseModel):
+    provider: str
+    value: str
+
+
+class RuntimePrefsUpdate(BaseModel):
+    order: str | None = None
+    timezone: str | None = None
+    default_profile: str | None = None
+
+
+@app.get("/api/settings")
+def get_settings() -> dict:
+    """Estado por provedor (nunca o valor da chave) + preferências de execução."""
+    from saci import settings
+
+    return {
+        "providers": settings.provider_status(),
+        "runtime": settings.runtime_prefs(),
+    }
+
+
+@app.post("/api/settings/key")
+def set_settings_key(update: KeyUpdate) -> dict:
+    """Grava (ou apaga, se `value` vier vazio) a chave de um provedor."""
+    from saci import settings
+
+    try:
+        settings.set_provider_key(update.provider, update.value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _log(f"settings: chave de {update.provider} "
+         f"{'removida' if not update.value.strip() else 'atualizada'}")
+
+    # Chave nova: dispara a sondagem em segundo plano, sem bloquear a
+    # resposta — o painel já reflete o resultado na próxima verificação.
+    if update.value.strip():
+        import threading
+        threading.Thread(
+            target=settings.trigger_catalog_refresh,
+            args=(update.provider,), name="settings-refresh", daemon=True,
+        ).start()
+
+    return {"ok": True}
+
+
+@app.post("/api/settings/test")
+def test_settings_key(payload: KeyTest) -> dict:
+    """Testa uma chave SEM salvá-la — usado pelo botão 'testar' antes de 'salvar'."""
+    from saci import settings
+
+    result = settings.test_key(payload.provider, payload.value)
+    _log(f"settings: teste de {payload.provider} -> "
+         f"{'ok' if result.get('ok') else result.get('status') or result.get('error')}")
+    return result
+
+
+@app.post("/api/settings/runtime")
+def set_settings_runtime(update: RuntimePrefsUpdate) -> dict:
+    """Grava ordem da cascata, fuso e/ou perfil padrão."""
+    from saci import settings
+
+    settings.set_runtime_prefs(
+        order=update.order, timezone=update.timezone,
+        default_profile=update.default_profile,
+    )
+    _log(f"settings: preferências de execução atualizadas ({update.model_dump(exclude_none=True)})")
+    return settings.runtime_prefs()
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page() -> str:
+    """Tela de configurações. Abra no navegador ou no Simple Browser do VSCode."""
+    return (Path(__file__).parent / "settings.html").read_text(encoding="utf-8")
+
+
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard() -> str:
     """Painel visual. Abra no navegador ou no Simple Browser do VSCode."""

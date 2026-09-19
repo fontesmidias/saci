@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saci — Configurações</title>
+<style>
+  :root {
+    --bg:#0d1117; --panel:#161b22; --border:#30363d; --hover:#1f2630;
+    --text:#e6edf3; --dim:#8b949e;
+    --ok:#3fb950; --warn:#d29922; --bad:#f85149; --accent:#58a6ff; --credit:#d2a8ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg:#fff; --panel:#f6f8fa; --border:#d0d7de; --hover:#eaeef2;
+      --text:#1f2328; --dim:#656d76; --credit:#8250df;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:14px; background:var(--bg); color:var(--text);
+         font:13px/1.45 ui-monospace,"Cascadia Code",Consolas,monospace; }
+  header { display:flex; justify-content:space-between; align-items:baseline;
+           gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  h1 { font-size:14px; margin:0; font-weight:600; }
+  .sub { color:var(--dim); font-size:11px; }
+  a.lnk-back { color:var(--accent); text-decoration:none; font-size:11px; }
+  a.lnk-back:hover { text-decoration:underline; }
+
+  .card { background:var(--panel); border:1px solid var(--border);
+          border-radius:6px; padding:11px 12px; margin-bottom:9px; }
+  .top { display:flex; justify-content:space-between; align-items:baseline;
+         gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+  .pname { font-weight:600; font-size:13px; }
+  .tag { font-size:10px; padding:1px 6px; border-radius:9px; border:1px solid var(--border);
+         color:var(--dim); margin-left:5px; vertical-align:middle; }
+  .tag.credit { color:var(--credit); border-color:var(--credit); }
+  .tag.ok { color:var(--ok); border-color:var(--ok); }
+  .tag.keyless { color:var(--dim); }
+  .notes { color:var(--dim); font-size:11px; margin-bottom:8px; }
+
+  .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  input[type=text], input[type=password] {
+    flex:1; min-width:200px; background:var(--bg); color:var(--text);
+    border:1px solid var(--border); border-radius:4px; padding:6px 8px;
+    font:inherit; font-size:12px;
+  }
+  input:focus { outline:1px solid var(--accent); }
+  button {
+    border:1px solid var(--border); background:transparent; color:var(--text);
+    border-radius:4px; padding:6px 12px; cursor:pointer; font:inherit;
+    font-size:11px; font-weight:600; white-space:nowrap;
+  }
+  button:hover { background:var(--hover); }
+  button:disabled { opacity:.5; cursor:default; }
+  button.primary { border-color:var(--accent); color:var(--accent); }
+  button.primary:hover { background:var(--accent); color:#fff; }
+  button.danger { border-color:var(--bad); color:var(--bad); }
+  button.danger:hover { background:var(--bad); color:#fff; }
+
+  .masked { font-family:inherit; color:var(--dim); font-size:12px; padding:6px 8px;
+            border:1px dashed var(--border); border-radius:4px; flex:1; min-width:200px; }
+  .result { font-size:11px; margin-top:6px; min-height:14px; }
+  .result.ok { color:var(--ok); }
+  .result.err { color:var(--bad); }
+  .keylink { font-size:11px; margin-top:6px; }
+  .keylink a { color:var(--accent); }
+
+  .runtime label { display:block; color:var(--dim); font-size:11px; margin:8px 0 4px; }
+  .runtime input { width:100%; }
+  .savebar { display:flex; justify-content:flex-end; gap:8px; margin-top:10px; }
+
+  footer { color:var(--dim); font-size:10px; margin-top:11px; }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Configurações do Saci</h1>
+      <span class="sub">chaves ficam só nesta máquina, nunca são reexibidas depois de salvas</span>
+    </div>
+    <a class="lnk-back" href="/dashboard">← voltar ao painel</a>
+  </header>
+
+  <div id="providers"></div>
+
+  <div class="card runtime">
+    <div class="top"><span class="pname">Preferências de execução</span></div>
+    <label>Ordem da cascata (separada por vírgula, o mais confiável primeiro)</label>
+    <input type="text" id="rt-order" placeholder="groq,google,mistral,...">
+    <label>Fuso horário (horas em relação a UTC — São Paulo é -3)</label>
+    <input type="text" id="rt-tz" placeholder="-3">
+    <label>Perfil padrão quando nenhum for pedido</label>
+    <input type="text" id="rt-profile" placeholder="fast">
+    <div class="savebar">
+      <span class="result" id="rt-result"></span>
+      <button class="primary" id="rt-save">salvar preferências</button>
+    </div>
+  </div>
+
+  <footer id="updated"></footer>
+
+<script>
+let PROVIDERS = [];
+
+function providerCard(p) {
+  const keyless = p.keyless;
+  const tags = [
+    p.cost === "credits" ? '<span class="tag credit">gasta crédito</span>' : "",
+    keyless ? '<span class="tag keyless">sem cadastro</span>' : (p.has_key ? '<span class="tag ok">configurada</span>' : ""),
+  ].join("");
+
+  const link = p.env_var
+    ? `<div class="keylink">variável <code>${p.env_var}</code></div>` : "";
+
+  const body = keyless
+    ? `<div class="notes">${p.notes}</div>`
+    : `<div class="notes">${p.notes}</div>
+       <div class="row" id="row-${p.key}">
+         ${p.has_key
+           ? `<span class="masked" id="masked-${p.key}">${p.masked}</span>
+              <button data-act="replace" data-p="${p.key}">substituir</button>
+              <button class="danger" data-act="remove" data-p="${p.key}">remover</button>`
+           : `<input type="password" id="input-${p.key}" placeholder="cole a chave aqui">
+              <button data-act="test" data-p="${p.key}">testar</button>
+              <button class="primary" data-act="save" data-p="${p.key}">salvar</button>`}
+       </div>
+       ${link}
+       <div class="result" id="result-${p.key}"></div>`;
+
+  return `<div class="card" id="card-${p.key}">
+    <div class="top"><span class="pname">${p.label}${tags}</span></div>
+    ${body}
+  </div>`;
+}
+
+function render() {
+  document.getElementById("providers").innerHTML = PROVIDERS.map(providerCard).join("");
+  wireEvents();
+}
+
+function showResult(key, text, ok) {
+  const el = document.getElementById(`result-${key}`);
+  if (!el) return;
+  el.textContent = text;
+  el.className = "result " + (ok === true ? "ok" : ok === false ? "err" : "");
+}
+
+function switchToEdit(key) {
+  // "substituir" vira um campo de input no lugar da chave mascarada.
+  const row = document.getElementById(`row-${key}`);
+  row.innerHTML = `<input type="password" id="input-${key}" placeholder="cole a nova chave">
+                    <button data-act="test" data-p="${key}">testar</button>
+                    <button class="primary" data-act="save" data-p="${key}">salvar</button>`;
+  wireEvents();
+}
+
+async function api(url, body) {
+  const res = await fetch(url, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  return res.json();
+}
+
+function wireEvents() {
+  document.querySelectorAll("button[data-act]").forEach(btn => {
+    btn.onclick = async () => {
+      const key = btn.dataset.p;
+      const act = btn.dataset.act;
+
+      if (act === "replace") { switchToEdit(key); return; }
+
+      if (act === "remove") {
+        if (!confirm(`Remover a chave de ${key}? A cascata vai pular este provedor.`)) return;
+        await api("/api/settings/key", { provider: key, value: "" });
+        await load();
+        return;
+      }
+
+      const input = document.getElementById(`input-${key}`);
+      const value = input ? input.value.trim() : "";
+      if (!value) { showResult(key, "cole uma chave antes.", false); return; }
+
+      if (act === "test") {
+        btn.disabled = true; btn.textContent = "testando…";
+        const r = await api("/api/settings/test", { provider: key, value });
+        btn.disabled = false; btn.textContent = "testar";
+        if (r.ok) {
+          showResult(key, `funciona — ${r.model} respondeu em ${(r.latency_ms/1000).toFixed(1)}s`, true);
+        } else {
+          showResult(key, r.error || `falhou: ${r.status} ${r.detail || ""}`.trim(), false);
+        }
+        return;
+      }
+
+      if (act === "save") {
+        btn.disabled = true; btn.textContent = "salvando…";
+        await api("/api/settings/key", { provider: key, value });
+        await load();
+      }
+    };
+  });
+}
+
+async function load() {
+  try {
+    const d = await (await fetch("/api/settings")).json();
+    PROVIDERS = d.providers;
+    render();
+    document.getElementById("rt-order").value = d.runtime.order;
+    document.getElementById("rt-tz").value = d.runtime.timezone;
+    document.getElementById("rt-profile").value = d.runtime.default_profile;
+    document.getElementById("updated").textContent =
+      "atualizado " + new Date().toLocaleTimeString("pt-BR");
+  } catch {
+    document.getElementById("providers").innerHTML =
+      '<div class="card"><span class="pname">servidor offline</span></div>';
+  }
+}
+
+document.getElementById("rt-save").onclick = async () => {
+  const btn = document.getElementById("rt-save");
+  btn.disabled = true;
+  await api("/api/settings/runtime", {
+    order: document.getElementById("rt-order").value,
+    timezone: document.getElementById("rt-tz").value,
+    default_profile: document.getElementById("rt-profile").value,
+  });
+  btn.disabled = false;
+  const el = document.getElementById("rt-result");
+  el.textContent = "salvo."; el.className = "result ok";
+  setTimeout(() => { el.textContent = ""; }, 3000);
+};
+
+load();
+</script>
+</body>
+</html>
