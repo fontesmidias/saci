@@ -1,5 +1,7 @@
 # Security
 
+*Em português: [SECURITY.pt-BR.md](SECURITY.pt-BR.md).*
+
 ## What Saci does with your API keys
 
 - Keys live in **your** `.env` (and, from 0.2, in `%APPDATA%\Saci`). They are

@@ -157,6 +157,27 @@ last looked, it still gets its turn.
 | Hyperbolic | 💳 | — | prepaid credit, flagged |
 | Cerebras | ❌ | — | 402 on a free account |
 
+## Installing, updating, uninstalling (Windows)
+
+**Today (0.1, developer install):**
+
+| Task | How |
+|---|---|
+| Install | `git clone` → `py -m venv .venv` → `pip install -e .` → fill `.env` |
+| Start | `saci-on` (stays up in the background via PM2) |
+| Stop | `saci-off` |
+| Update | `git pull` then `saci-off && saci-on` |
+| Uninstall | `saci-off`, then delete the folder. Nothing is written outside it. |
+
+Your keys (`.env`), history (`usage.db`) and preferences (`prefs.json`) live in
+the project folder and are never committed.
+
+**From 0.2 (installer):** download the `.exe` from
+[Releases](https://github.com/fontesmidias/saci/releases), double-click, done —
+no Python, no PM2, no terminal. Updating and uninstalling go through Windows
+Settings → Apps, and your data stays in `%APPDATA%\Saci` unless you ask to
+remove it.
+
 ## Roadmap
 
 - **0.2 — desktop app:** system-tray icon, native window, settings screen for keys,

@@ -1,0 +1,8 @@
+#!/bin/sh
+# R1: remove atribuicao de autoria a IA da mensagem de commit.
+# A regra do usuario prevalece sobre lembretes automaticos de atribuicao.
+MSG="$1"
+grep -qiE "^(Co-Authored-By: *Claude|.*Generated with \[?Claude)" "$MSG" 2>/dev/null || exit 0
+grep -viE "^(Co-Authored-By: *Claude|.*Generated with \[?Claude)" "$MSG" > "$MSG.tmp"
+mv "$MSG.tmp" "$MSG"
+echo "check_rules: linha de atribuicao a IA removida da mensagem (regra R1)."

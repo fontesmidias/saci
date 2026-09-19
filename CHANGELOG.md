@@ -1,6 +1,7 @@
 # Changelog
 
 All notable changes to Saci are documented here.
+*Em português: [CHANGELOG.pt-BR.md](CHANGELOG.pt-BR.md).*
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]

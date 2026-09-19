@@ -1,223 +1,207 @@
 # Saci
 
-> **Roteador de LLMs gratuitas. Quando uma acaba, ele pula para a próxima.**
+> **Um roteador de LLMs gratuitas. Quando uma acaba, ele pula para a próxima.**
 > *Sempre dá um jeito.* — [English version](README.md)
 
-[![CI](https://github.com/fontesmidias/saci/actions/workflows/ci.yml/badge.svg)](https://github.com/fontesmidias/saci/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![CI](https://github.com/fontesmidias/saci/actions/workflows/ci.yml/badge.svg)](https://github.com/fontesmidias/saci/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.pt-BR.md)
+[![Status: beta](https://img.shields.io/badge/status-beta-orange.svg)](CHANGELOG.pt-BR.md)
 
-Cascata de fallback entre provedores de LLM **gratuitos**. Se um provedor
-estoura a cota (429), cai (5xx) ou remove um modelo (404/410), o router
-passa automaticamente para o próximo — sem intervenção.
+O Saci é para quem **não pode pagar APIs de LLM** — estudantes, times pequenos,
+quem está entre uma assinatura e outra. Ele transforma as camadas gratuitas de
+Groq, Google AI Studio, Mistral, NVIDIA NIM, OpenRouter e outros em **um único
+endpoint local compatível com a OpenAI** que nunca fica sem resposta:
 
-Inspirado no [awesome-ai-free-tiers](https://github.com/4pixeltechBR/awesome-ai-free-tiers),
-mas com uma diferença central: **nenhum modelo entra na configuração sem
-ter respondido a uma chamada real**. Catálogos publicados (inclusive o
-daquele repositório) listam modelos que retornam 404 ou 410 na prática.
+- **Cascata de fallback, por modelo.** Cota estourada (429), modelo removido
+  (404/410), provedor fora do ar (5xx), prompt grande demais (413) — o Saci tenta
+  o próximo modelo. Ele controla a cota *por modelo*, porque o Groq conta tokens
+  por modelo, não por conta.
+- **Cota que você enxerga.** Barras ao vivo, a hora em que cada cota reseta *no
+  seu fuso*, e um rótulo honesto em cada número: `oficial` (dos headers do
+  provedor) ou `estimado` (nossa contagem local).
+- **Um catálogo que se mantém sozinho.** A cada hora o Saci busca a lista de
+  modelos de cada provedor, descarta os que não são de chat e sonda cada modelo
+  *novo* uma vez. Só o que respondeu `200` com a sua chave entra na cascata.
+  Coloque uma chave e o provedor entra sozinho.
+- **Funciona com as ferramentas que você já usa.** Verificado com **Cline**
+  (VS Code) e **Aider** (terminal). Qualquer coisa que fale a API da OpenAI serve.
 
-## Instalação
+O nome vem do [Saci](https://pt.wikipedia.org/wiki/Saci_(folclore)), o travesso de
+uma perna só do folclore brasileiro, que sempre dá um jeito.
+
+---
+
+## Começo rápido (Windows)
 
 ```powershell
+git clone https://github.com/fontesmidias/saci
+cd saci
 py -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-copy .env.example .env
+.venv\Scripts\python.exe -m pip install -e .
+copy .env.example .env        # cole pelo menos uma chave (veja a tabela abaixo)
+saci-on                       # servidor em http://127.0.0.1:8000 — fica de pé via PM2
+saci-panel                    # painel no navegador
 ```
 
-Preencha o `.env` com suas chaves. Ele está no `.gitignore` e nunca é commitado.
+O `saci-on` precisa do [PM2](https://pm2.keymetrics.io/) (`npm i -g pm2`). Sem ele,
+rode `.venv\Scripts\python.exe server.py` num terminal que você deixe aberto.
+Linux/macOS: `python -m saci.server` — os atalhos `.cmd` ainda são só para Windows.
 
-### Onde pegar as chaves (todas sem cartão de crédito)
+### Chaves gratuitas (sem cartão de crédito)
 
-| Provedor | Link | Formato |
+| Provedor | Onde pegar a chave | Por que está na cascata |
 |---|---|---|
-| Groq | https://console.groq.com/keys | `gsk_...` |
-| Google AI Studio | https://aistudio.google.com/apikey | `AIzaSy...` ou `AQ.Ab8...` |
-| Mistral | https://console.mistral.ai/ | 32 caracteres |
-| NVIDIA NIM | https://build.nvidia.com/ | `nvapi-...` |
-| OpenRouter | https://openrouter.ai/keys | `sk-or-v1-...` |
+| Groq | https://console.groq.com/keys | Disparado o mais rápido (~0,5 s); 1.000 req/dia |
+| Google AI Studio | https://aistudio.google.com/apikey | Maior contexto, 1.500 req/dia |
+| Mistral | https://console.mistral.ai/ | O `codestral` é excelente para código |
+| NVIDIA NIM | https://build.nvidia.com/ | Modelos abertos grandes (lento, mas grátis) |
+| OpenRouter | https://openrouter.ai/keys | Dezenas de modelos `:free` — o único que publica preço |
+| SambaNova | https://cloud.sambanova.ai/ | Llama/DeepSeek, 30 RPM |
+| Hugging Face | https://huggingface.co/settings/tokens | Modelos abertos serverless |
+| LLM7.io | *não precisa de chave* | Último recurso, sem cadastro |
 
-## Uso
+O Hyperbolic também é suportado, mas gasta **crédito pré-pago** — o Saci sinaliza
+isso em todos os lugares.
 
-```powershell
-saci "o que e um indice em banco de dados"
+---
 
-saci -p code "funcao Python que valida CPF"
-saci -p plan "como estruturar um sistema de RH multi-empresa"
+## Como usar
 
-saci -v -p code "refatore isso"     # mostra qual provedor atendeu
-saci --status                       # testa todos os provedores
-saci --profiles                     # lista os perfis
-
-type arquivo.py | saci -p code "adicione testes:"
-```
-
-### Perfis
-
-| Perfil | Para quê | Primeiro da fila |
-|---|---|---|
-| `code` | gerar/refatorar código | Groq `gpt-oss-120b` (~2s) |
-| `plan` | arquitetura, decisões, quebra de tarefas | Groq `gpt-oss-120b` (~5s) |
-| `agent` | Cline/Continue — prompts grandes | Mistral `codestral-latest` |
-| `fast` | perguntas rápidas | Groq `gpt-oss-20b` (~1s) |
-| `long` | textos longos, contexto grande | Google `gemini-3.6-flash` |
-| `pt` | português corporativo, documentos | Google `gemini-3.6-flash` |
-
-## Servidor local (para extensões do VSCode)
-
-Expõe o router como uma API compatível com a OpenAI, para plugar em
-Cline, Continue, Aider e afins.
-
-```powershell
-saci-on       # liga (fica em segundo plano via PM2)
-saci-status   # mostra estado + testa provedores
-saci-usage    # consumo e cota restante por provedor
-saci-logs     # logs ao vivo (Ctrl+C sai)
-saci-off      # desliga
-```
-
-Com o PM2 você pode fechar o terminal: o servidor continua rodando e
-reinicia sozinho se cair.
-
-### Configuração na extensão
+### No Cline, no Aider ou em qualquer cliente OpenAI
 
 | Campo | Valor |
 |---|---|
 | Base URL | `http://127.0.0.1:8000/v1` |
-| API Key | qualquer coisa (não é verificada) |
-| Model | `saci-code`, `saci-plan`, `saci-agent`, `saci-fast`, `saci-long` ou `saci-pt` |
+| API key | qualquer coisa (o servidor é local e não verifica) |
+| Modelo | `saci-code` · `saci-plan` · `saci-agent` · `saci-fast` · `saci-long` · `saci-pt` |
 
-Cada perfil aparece como um "modelo" na extensão. A resposta traz um campo
-extra `x_router` dizendo qual provedor de fato atendeu e em quanto tempo.
+Cada "modelo" é um **perfil de tarefa** — uma cascata ordenada para aquele trabalho:
 
-**Roteamento por tamanho:** prompts acima de ~24k caracteres são promovidos
-automaticamente para o perfil `agent`. O Groq rejeita requisições grandes
-com HTTP 413, então pular direto para quem aguenta o volume evita gastar
-uma tentativa fadada ao erro. Isso vale mesmo se o Model ID for outro.
+| Perfil | Para quê | Começa por |
+|---|---|---|
+| `saci-code` | escrever / refatorar código | Groq `gpt-oss-120b`, Mistral `codestral` |
+| `saci-plan` | arquitetura, trade-offs | Groq `gpt-oss-120b`, Gemini |
+| `saci-agent` | agentes de código (prompts enormes) | Mistral, Gemini — quem aceita requisições do tamanho que dá 413 |
+| `saci-fast` | perguntas rápidas | Groq `gpt-oss-20b` |
+| `saci-long` | documentos longos | Gemini (contexto de 1M) |
+| `saci-pt` | português do Brasil, texto formal | Gemini, Groq |
 
-> O servidor escuta só em `127.0.0.1` e **não exige autenticação**.
-> Não o exponha na rede sem antes adicionar uma.
+Prompts acima de ~24 mil caracteres são promovidos para `saci-agent`
+automaticamente, seja qual for o modelo pedido — por isso o Cline simplesmente
+funciona.
 
-### Aider (agente de código no terminal, sem VSCode)
+Aider: use um [`~/.aider.conf.yml`](CONTRIBUTING.pt-BR.md) com
+`openai-api-base: http://127.0.0.1:8000/v1` e `model: openai/saci-code`.
 
-Instalado com `uv tool install aider-chat --python 3.12` (o Aider exige
-Python < 3.13; o `uv` baixa um 3.12 isolado). A configuração fica em
-`%USERPROFILE%\.aider.conf.yml` e aponta para o router — vale em qualquer
-projeto:
-
-```powershell
-cd meu-projeto
-aider                       # abre o chat de código
-aider arquivo.py            # já com o arquivo no contexto
-aider --message "adicione testes para calc.py" calc.py   # não interativo
-```
-
-`model: openai/saci-code` para editar, `weak-model: openai/saci-fast`
-para mensagens de commit. `auto-commits: false`: você decide quando commitar.
-
-Verificado: edição real aplicada via Groq em 0,9s.
-
-### Como biblioteca
-
-```python
-from saci import LLMRouter
-
-router = LLMRouter(profile="code")
-r = router.ask("funcao que valida CNPJ")
-
-print(r.content)
-print(r.provider, r.model, r.latency)   # quem atendeu
-print(r.attempts)                        # quem falhou antes
-```
-
-## Monitoramento de consumo
+### No terminal
 
 ```powershell
-saci-usage
+saci "explique índices de banco de dados em uma frase"
+saci -p code "função Python que valida CPF"
+type app.py | saci -p code "adicione testes:"
+saci --usage        # cota por provedor e modelo, horários de reset
+saci --catalog      # todos os modelos descobertos e seus vereditos
+saci --refresh      # descobrir e sondar agora
 ```
 
-Mostra, por provedor, quantas chamadas e tokens foram gastos hoje e quanto
-resta da cota — mais o endpoint `http://127.0.0.1:8000/usage` (JSON) enquanto
-o servidor estiver no ar.
+### O painel e a barra de status
 
-Há duas fontes de dado, e a saída diz qual está sendo usada:
+O `saci-panel` abre `http://127.0.0.1:8000/dashboard`:
+
+- barra de cota por provedor, **"reseta às 21:00"** com contagem regressiva ao vivo
+- todo modelo descoberto com seu veredito — `ok`, `pago`, `removido`,
+  `sem cota agora` — e um botão **usar** para fixar um deles
+- troca de perfil, "verificar catálogo agora", consumo de RAM do servidor
+
+A pasta `vscode-statusbar/` é uma extensão local minúscula do VS Code: ela mostra
+`⚡ groq 1% · 21:00` na barra de status; clicar abre um seletor para trocar de
+perfil ou fixar qualquer modelo verificado. Instale copiando a pasta para
+`%USERPROFILE%\.vscode\extensions\local.saci-status-0.1.0` e recarregando a janela.
+
+---
+
+## Como o "grátis" é decidido
+
+Esta é a parte que toda "lista de LLMs grátis" erra, então vamos ao ponto:
+
+- **Só o OpenRouter publica preço** na sua lista de modelos.
+- Groq, Google, Mistral, NVIDIA e o resto publicam *nomes*. Alguns desses nomes
+  devolvem `404`, `410`, `402` ou `403` no instante em que você chama.
+- Por isso o Saci **sonda**: uma requisição de três palavras por modelo novo, uma
+  única vez. `200` → utilizável. `402/403` → pago, não é testado de novo por 30
+  dias. `404/410` → removido. `429` → nova tentativa em uma hora. Os modelos `ok`
+  são reconferidos a cada 14 dias, para pegar remoções silenciosas.
+
+O resultado é uma lista que você não escreveu e não mantém — e esse é o objetivo.
+
+## Controle de cota, com honestidade
 
 | Provedor | Fonte | O que sabemos |
 |---|---|---|
-| Groq | `[oficial]` | headers: req e tokens restantes + quando reseta |
-| Mistral | `[oficial]` | headers: req e tokens restantes por minuto |
-| OpenRouter | endpoint | `/v1/key` informa uso acumulado |
-| Google | `[estimado]` | não informa nada — contamos localmente |
-| NVIDIA | `[estimado]` | não informa nada — contamos localmente |
+| Groq, Mistral | **oficial** — headers da resposta | requisições e tokens restantes, hora do reset |
+| OpenRouter | oficial — `/v1/key` | uso acumulado |
+| Google, NVIDIA, outros | **estimado** — contagem local | chamadas e tokens de hoje contra o limite diário conhecido |
 
-### Troca automática ao esgotar
+Todo número na interface carrega seu rótulo. Um modelo que passou de 95% da cota
+vai para o *fim* da cascata em vez de ser descartado: se a cota resetou desde a
+última verificação, ele ainda tem a sua vez.
 
-Quando um provedor passa de 95% da cota, ele vai para o **fim** da fila em
-vez de ser tentado primeiro. Não é removido: se a cota tiver resetado, ele
-ainda é tentado como último recurso.
+## Situação (verificada em 19/09/2026)
 
-O histórico fica em `usage.db` (SQLite local, fora do git), então sobrevive
-a reinícios do servidor.
-
-## Catálogo automático de modelos
-
-Você não mantém lista de modelos. Ao subir, e depois a cada hora, o
-servidor faz por provedor:
-
-1. **descobre** — `GET /models`
-2. **filtra** — descarta o que não é chat (embedding, TTS, imagem, guard…)
-3. **sonda** — uma chamada mínima em cada modelo *novo*, uma vez só:
-   `200` ok · `402/403` pago · `404/410` removido · `429` sem cota agora
-4. **guarda** — veredito, latência e contexto em `usage.db`
-5. **revisa** — sumiu do catálogo 2 vezes → removido; `429` re-testa em 1h;
-   `ok` re-testa a cada 14 dias; pago a cada 30
-
-Só o OpenRouter diz no catálogo o que é grátis. Nos outros, "grátis" é o
-que respondeu `200` — por isso a sondagem existe.
-
-Um provedor **novo** (chave recém-colada) entra na cascata sozinho: os
-perfis aceitam `(provedor, None)` = "os 2 melhores verificados", e todo
-provedor de `LLM_ROUTER_ORDER` que o perfil não cita entra no fim.
-
-```powershell
-ask --catalog    # o que foi descoberto, com veredito
-ask --refresh    # verificar agora, no terminal
-```
-
-Ou no painel: **verificar agora**. Cada modelo mostra o veredito, e só os
-`ok` têm o botão **usar**.
-
-## Fuso horário
-
-`LLM_ROUTER_TZ=-3` (São Paulo). O painel mostra o reset como hora de
-relógio — *"reseta às 21:00"* — e cada provedor conta o "hoje" pelo seu
-próprio ciclo (Groq vira à meia-noite UTC = 21:00 aqui; Google, à
-meia-noite do Pacífico = 04:00 aqui).
-
-## Manutenção
-
-Quase nada: o catálogo se revisa sozinho. Se um perfil curado apontar para
-um modelo que sumiu, a cascata pula para o próximo; para limpar, edite
-`PROFILES` em `saci/providers.py` guiado por `ask --catalog`.
-
-## Estado verificado (19/09/2026)
-
-| Provedor | Status | Latência | Observação |
+| Provedor | Funciona | Latência | Observações |
 |---|---|---|---|
-| Groq | ✅ | 0.5–2s | Mais rápido e estável |
-| Google AI Studio | ✅ | 1.5–24s | Cota alta; `gemini-3.8-flash` dá 503 em pico |
-| Mistral | ✅ | 0.5–2s | `codestral-latest` é ótimo para código |
-| NVIDIA NIM | ⚠️ | 15–70s | Muitos IDs dão 404/410/503 |
-| OpenRouter | ⚠️ | — | Modelos `:free` quase sempre em 429 |
-| LLM7.io | ⚠️ | 3s | Sem chave; instável, última rede |
-| Hyperbolic | 💳 | — | US$ 1 de crédito — **gasta saldo** |
-| Cerebras | ❌ | — | HTTP 402: exige plano pago |
-| SiliconFlow | ❌ | — | Cadastro não liberado; removido |
+| Groq | ✅ | 0,3–2 s | 6 modelos de chat verificados; o mais rápido |
+| Google AI Studio | ✅ | 1–25 s | Os `gemini-2.5-*` **sumiram** (404), apesar do que as listas dizem |
+| Mistral | ✅ | 0,5–2 s | 12 grátis, 2 pagos (`labs-*`), camada gratuita é 1 req/s |
+| NVIDIA NIM | ⚠️ | 15–70 s | 46 dos 62 modelos de chat listados devolvem 404/410/503 |
+| OpenRouter | ⚠️ | varia | 25 grátis de 419; os `:free` são disputados |
+| LLM7.io | ⚠️ | ~3 s | sem chave; saída instável, só como último recurso |
+| Hyperbolic | 💳 | — | crédito pré-pago, sinalizado |
+| Cerebras | ❌ | — | 402 em conta gratuita |
 
-### Modelos descontinuados que listas desatualizadas ainda citam
+## Instalar, atualizar, desinstalar (Windows)
 
-`gemini-2.5-flash` (404) · `gemini-2.5-pro` (404) · `meta/llama-3.3-70b-instruct`
-na NVIDIA (410) · `qwen/qwen3-coder-480b` na NVIDIA (410)
+**Hoje (0.1, instalação de desenvolvedor):**
 
-## Nota sobre os modelos gratuitos
+| Tarefa | Como |
+|---|---|
+| Instalar | `git clone` → `py -m venv .venv` → `pip install -e .` → preencher o `.env` |
+| Ligar | `saci-on` (fica em segundo plano via PM2) |
+| Desligar | `saci-off` |
+| Atualizar | `git pull` e depois `saci-off && saci-on` |
+| Desinstalar | `saci-off` e apagar a pasta. Nada é escrito fora dela. |
 
-Eles têm corte de conhecimento e **não sabem quais LLMs existem hoje** —
-ao serem perguntados sobre isso, sugerem modelos já descontinuados. Use-os
-para executar tarefas, não para decidir sobre o próprio ecossistema de IA.
+Suas chaves (`.env`), o histórico (`usage.db`) e as preferências (`prefs.json`)
+ficam na pasta do projeto e nunca são commitados.
+
+**A partir da 0.2 (instalador):** baixe o `.exe` em
+[Releases](https://github.com/fontesmidias/saci/releases), dê dois cliques e
+pronto — sem Python, sem PM2, sem terminal. Atualizar e desinstalar passam a ser
+pelas Configurações do Windows → Aplicativos, e seus dados ficam em
+`%APPDATA%\Saci`, a menos que você peça para removê-los.
+
+## Planejado
+
+- **0.2 — aplicativo de desktop:** ícone na bandeja, janela nativa, tela de
+  configurações para as chaves, dados em `%APPDATA%`, instalador para Windows.
+  Aposenta o PM2 e os arquivos `.cmd`.
+- Inicializador multiplataforma (Linux/macOS com atalhos de primeira classe).
+- Limitador de taxa por modelo, para agentes que disparam requisições em paralelo.
+
+Veja o [CHANGELOG.pt-BR.md](CHANGELOG.pt-BR.md).
+
+## Como contribuir
+
+O PR mais útil é um provedor que funciona ou um limite que mudou — veja
+[CONTRIBUTING.pt-BR.md](CONTRIBUTING.pt-BR.md). Uma regra só: cole a saída da
+sondagem. Catálogos mentem.
+
+Notas de segurança em [SECURITY.pt-BR.md](SECURITY.pt-BR.md): as chaves ficam na
+sua máquina, o servidor escuta em `127.0.0.1` e não tem autenticação — não o
+exponha.
+
+## Licença
+
+[MIT](LICENSE) © Bruno Fontes

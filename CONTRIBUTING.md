@@ -1,15 +1,15 @@
 # Contributing to Saci
 
 Thanks for stopping by. Saci exists for people who can't pay for LLM APIs, so
-the most valuable contributions are the boring ones: a provider that works, a
-limit that changed, a model that died. *Português mais abaixo.*
+the most valuable contributions are the unglamorous ones: a provider that works,
+a limit that changed, a model that died. *Em português: [CONTRIBUTING.pt-BR.md](CONTRIBUTING.pt-BR.md).*
 
 ## The one rule
 
 **Nothing enters the config without having answered a real request.**
 Catalogs lie: models listed in `/models` return 404, 410 or 402 all the time.
 If you add or change a provider or model, paste the output of `saci --catalog`
-(or the probe result) in the PR. That's the whole review.
+(or the probe result) in the PR. That's basically the whole review.
 
 ## Run it locally
 
@@ -37,38 +37,27 @@ Windows-only for now (a cross-platform launcher is welcome).
 4. `.env.example` — the key name and where to get it.
 5. Run `saci --refresh` and paste the result in the PR.
 
-## Report a quota/limit change
+## Report a quota or limit change
 
-Open an issue with the provider, the old and new limit, and where you saw it
+Open an issue with the provider, the old limit, the new one and where you saw it
 (headers, dashboard, docs). Limits change silently; this is how the table stays
 honest.
 
 ## Code style
 
 `ruff check saci` must pass. Match the surrounding code: small modules, comments
-that explain *why*, Portuguese or English both fine in comments. Keep it
-maintainable by a 27B model — that's a design goal, not a joke.
+that explain *why*, Portuguese or English in comments — either is fine. Keep the
+code simple enough for a 27B model to edit — that's a design goal, not a joke.
+
+The project's unbreakable rules are in [CLAUDE.md](CLAUDE.md) and are enforced by
+`python scripts/check_rules.py`. Run it before opening a PR.
 
 ## Pull requests
 
 - One topic per PR.
-- If behaviour changed, add a line to `CHANGELOG.md` under *Unreleased*.
+- If behaviour changed, add a line to `CHANGELOG.md` **and** `CHANGELOG.pt-BR.md`,
+  under *Unreleased* / *Não lançado*.
 - Don't commit `.env`, `usage.db`, `prefs.json` or logs (they're ignored;
   double-check anyway).
-
----
-
-# Contribuindo (pt-BR)
-
-**A regra única:** nada entra na configuração sem ter respondido a uma
-requisição real. Ao adicionar ou mudar provedor/modelo, cole a saída de
-`saci --catalog` no PR.
-
-**Adicionar provedor:** `Provider(...)` em `saci/providers.py` (deixe
-`models=[]`; o catálogo descobre), limites conhecidos em `KNOWN_LIMITS`
-(`saci/usage.py`), nome da chave em `.env.example`, `saci --refresh`, cole o
-resultado.
-
-**Mudou uma cota?** Abra uma issue com o limite antigo, o novo e onde viu.
-
-Nunca commite `.env`, `usage.db`, `prefs.json` ou logs.
+- Documentation is always bilingual and complete in both languages: if you touch
+  `README.md`, touch `README.pt-BR.md` in the same commit.

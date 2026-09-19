@@ -1,0 +1,15 @@
+#!/bin/sh
+# Hook do Saci: bloqueia commits que violem as regras de CLAUDE.md.
+# Instalado por: git config core.hooksPath .githooks
+#
+# Emergencia (evite): git commit --no-verify
+
+PY=".venv/Scripts/python.exe"
+[ -x "$PY" ] || PY="$(command -v python3 || command -v python || command -v py)"
+[ -n "$PY" ] || { echo "check_rules: Python nao encontrado; pulando."; exit 0; }
+
+"$PY" scripts/check_rules.py || {
+  echo ""
+  echo "Commit bloqueado pelas regras do projeto (CLAUDE.md)."
+  exit 1
+}
