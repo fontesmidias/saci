@@ -156,6 +156,27 @@ def _free_by_catalog(provider_key: str, item: dict) -> int | None:
     return None
 
 
+def _extrair_contexto(item: dict) -> int | None:
+    """
+    O tamanho de contexto do modelo, em tokens — se o provedor informar.
+
+    A maioria expõe um inteiro direto (`context_length`, `context_window`
+    ou `max_context_length`). O LLM7 é diferente: `context_window` vem
+    como objeto (`{"tokens": 400000, "chars": null}`), não um número —
+    gravar isso direto na coluna `context` (INTEGER) do SQLite falha com
+    "Error binding parameter: type 'dict' is not supported". Descoberto
+    testando a Etapa 7 (o app empacotado sonda o LLM7 mesmo sem nenhuma
+    chave configurada, por ele ser keyless).
+    """
+    for chave in ("context_length", "context_window", "max_context_length"):
+        valor = item.get(chave)
+        if isinstance(valor, dict):
+            valor = valor.get("tokens")
+        if isinstance(valor, (int, float)):
+            return int(valor)
+    return None
+
+
 def fetch_catalog(provider: Provider) -> tuple[list[dict], str | None]:
     """GET /models normalizado. Retorna (itens, erro)."""
     key = _api_key(provider)
@@ -295,8 +316,7 @@ def refresh_provider(
         for it in chat:
             mid = it["id"]
             free = _free_by_catalog(provider.key, it)
-            ctx = it.get("context_length") or it.get("context_window") \
-                or it.get("max_context_length")
+            ctx = _extrair_contexto(it)
             name = it.get("name") or it.get("display_name")
             row = conn.execute(
                 "SELECT status FROM models WHERE provider=? AND model=?",

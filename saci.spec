@@ -30,7 +30,7 @@ dados_saci = [
 ]
 
 a = Analysis(
-    ["saci/app.py"],
+    ["saci_launcher.py"],
     pathex=["."],
     binaries=[],
     datas=dados_saci,

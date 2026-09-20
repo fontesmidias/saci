@@ -596,7 +596,16 @@ def main(port: int = DEFAULT_PORT) -> None:
     for linha in banner:
         _log(linha)
 
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+    uvicorn.run(
+        app, host="127.0.0.1", port=port, log_level="warning",
+        # Força o loop asyncio padrão em vez da detecção automática
+        # ("auto"): dentro do executável empacotado (PyInstaller), a
+        # tentativa de detectar/importar uvloop (que nem existe no
+        # Windows) pode travar sem lançar exceção, em vez de cair no
+        # fallback — o processo fica vivo, loga o banner, mas nunca
+        # chega a aceitar conexões. Descoberto testando a Etapa 7.
+        loop="asyncio",
+    )
 
 
 if __name__ == "__main__":
