@@ -46,23 +46,20 @@ jobs:
             exit 1
           }
 
-      - name: Instalar o WebView2 Runtime
-        shell: pwsh
-        run: |
-          # windows-latest é Windows Server, que -- ao contrário do Windows
-          # 10/11 de usuário final -- não vem com o Edge WebView2 Runtime
-          # pré-instalado. Sem ele, webview.create_window()/start() derruba
-          # o processo inteiro antes do servidor responder, e o teste de
-          # fumaça falha por um motivo que não existe numa máquina real
-          # (ver saci.iss, que já checa e avisa sobre isso na instalação).
-          $installer = "$env:RUNNER_TEMP\MicrosoftEdgeWebview2Setup.exe"
-          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $installer
-          Start-Process -FilePath $installer -ArgumentList "/silent", "/install" -Wait
-
       - name: Fumaça do .exe empacotado
         shell: pwsh
         run: |
+          # SACI_NO_WINDOW pula webview.create_window()/start(): o runner
+          # do GitHub Actions roda sem sessão de desktop interativa, e
+          # criar uma janela nativa trava o processo indefinidamente nesse
+          # ambiente -- não é um bug de código, não existe numa máquina
+          # real de usuário final (já tentamos instalar o WebView2 Runtime
+          # antes deste step para descartar essa hipótese; o travamento
+          # persistiu idêntico, confirmando que é a sessão não-interativa,
+          # não o runtime). O resto do binário -- servidor, catálogo,
+          # migrations -- é o mesmo processo que o usuário roda de verdade.
           $env:SACI_HOME = "$env:RUNNER_TEMP\saci-ci-home"
+          $env:SACI_NO_WINDOW = "1"
           $proc = Start-Process -FilePath "dist\Saci\Saci.exe" -PassThru
           $ok = $false
           for ($i = 0; $i -lt 30; $i++) {
