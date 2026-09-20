@@ -58,11 +58,21 @@ jobs:
           # persistiu idêntico, confirmando que é a sessão não-interativa,
           # não o runtime). O resto do binário -- servidor, catálogo,
           # migrations -- é o mesmo processo que o usuário roda de verdade.
+          #
+          # Exclusão do Defender: o log mostrou o banner de início e só
+          # ~25s depois o aviso de timeout -- padrão de scan on-access
+          # síncrono do Windows Defender na primeira execução de um .exe
+          # novo e não assinado com dezenas de DLLs (PyInstaller --onedir).
+          # Testado localmente sem chaves de API (SACI_HOME vazio,
+          # replicando o CI): respondeu em menos de 1s, então não é o
+          # código -- é o próprio ambiente do runner escaneando o binário.
+          Add-MpPreference -ExclusionPath (Resolve-Path "dist\Saci").Path -ErrorAction SilentlyContinue
+
           $env:SACI_HOME = "$env:RUNNER_TEMP\saci-ci-home"
           $env:SACI_NO_WINDOW = "1"
           $proc = Start-Process -FilePath "dist\Saci\Saci.exe" -PassThru
           $ok = $false
-          for ($i = 0; $i -lt 30; $i++) {
+          for ($i = 0; $i -lt 60; $i++) {
             Start-Sleep -Seconds 1
             try {
               $r = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
@@ -81,7 +91,7 @@ jobs:
           }
           Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           if (-not $ok) {
-            Write-Error "Saci.exe nao respondeu em /health dentro de 30s -- ver PLAN.md Etapa 7 (bugs de loop=asyncio e do launcher)."
+            Write-Error "Saci.exe nao respondeu em /health dentro de 60s -- ver PLAN.md Etapa 7/8 (bugs de loop=asyncio, do launcher, e o scan do Defender no runner)."
             exit 1
           }
           Write-Output "Saci.exe respondeu normalmente."
