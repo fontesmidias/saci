@@ -285,18 +285,77 @@ código é idêntico.
 **Novo extra opcional** `pyproject.toml`: `build = ["pyinstaller>=6.22"]`
 — só quem empacota precisa instalar.
 
-## Etapa 7 — Instalador
+## Etapa 7 — Instalador (`saci.iss`) ✅ concluída
 
-- [ ] [Inno Setup](https://jrsoftware.org/isinfo.php) (gratuito, gera um `.exe`
-      instalador, cria atalhos e entrada em Aplicativos)
-- [ ] Instala em `%LOCALAPPDATA%\Programs\Saci` (não pede administrador)
-- [ ] Desinstalação: remove o programa; pergunta se apaga `%APPDATA%\Saci`
-- [ ] Detectar ausência do WebView2 e oferecer o instalador oficial da Microsoft
+- [x] [Inno Setup](https://jrsoftware.org/isinfo.php) 6.7.3, instalado via
+      `winget install JRSoftware.InnoSetup` (por usuário, sem admin)
+- [x] Instala em `%LOCALAPPDATA%\Programs\Saci` (`PrivilegesRequired=lowest`)
+      — confirmado sem admin: a chave de desinstalação fica em `HKCU`, não
+      `HKLM`
+- [x] Desinstalação: remove o programa; pergunta se apaga `%APPDATA%\Saci`
+      (chaves, histórico, catálogo) — nunca apaga sem perguntar. Também
+      remove a entrada de autostart (Etapa 5) para não deixar uma chave
+      órfã apontando para um `.exe` que não existe mais
+- [x] Detecta ausência do WebView2 antes de instalar e oferece abrir a
+      página oficial de download
 
-**Cuidado:** o `.exe` não será assinado. O Windows SmartScreen vai avisar
-("aplicativo não reconhecido") nas primeiras centenas de downloads. Isso
-**precisa estar no README**, com o passo "Mais informações → Executar assim
-mesmo". Certificado de assinatura custa ~US$ 200/ano — fora do escopo.
+**Bug de sintaxe do próprio Inno Setup:** `#13#10` (quebra de linha em
+Pascal Script) no **início** de uma linha é lido pelo pré-processador
+(ISPP) como diretiva (`#define`, `#if`...), não como código —
+`"Error on line 99: Unknown preprocessor directive"`. Corrigido mantendo
+cada `#13#10` concatenado ao final da linha de texto anterior, nunca
+sozinho como primeiro token de uma linha.
+
+**Cuidado (mantido):** o `.exe` não é assinado. O Windows SmartScreen
+avisa ("aplicativo não reconhecido") nas primeiras execuções — confirmado
+na prática: vários `.exe` de teste gerados durante esta etapa dispararam
+o aviso "Este aplicativo foi bloqueado" do Windows Defender SmartScreen.
+Isso **precisa estar no README** (Etapa 8), com o passo "Mais informações
+→ Executar assim mesmo". Certificado de assinatura custa ~US$ 200/ano —
+fora do escopo.
+
+### Dois bugs sérios só encontrados testando esta etapa de verdade
+
+A Etapa 6 tinha "passado" nos testes, mas por um motivo errado: o PM2
+estava rodando o tempo todo na porta 8000, e **todas** as chamadas de
+chat dos testes anteriores foram respondidas por ele, não pelo `.exe`. Só
+apareceu ao testar a instalação real com o PM2 explicitamente parado.
+
+1. **Import relativo quebrava o app inteiro.** `Analysis(["saci/app.py"])`
+   faz o PyInstaller tratar `app.py` como script top-level (módulo
+   `__main__`, sem pacote pai) — todo `from . import paths` dentro dele
+   falhava com `ImportError: attempted relative import with no known
+   parent package`, **silenciosamente**, porque `console=False` esconde
+   o traceback. O processo morria no import, antes de logar qualquer
+   coisa. Corrigido com `saci_launcher.py`, um arquivo **fora** do pacote
+   `saci/` que faz `from saci.app import main` (import absoluto) — o
+   mesmo `saci/app.py` roda idêntico em desenvolvimento e empacotado.
+
+2. **`uvicorn` às vezes nunca aceitava conexões.** Com o import corrigido,
+   o processo passou a rodar e logar o banner, mas o servidor ficava
+   intermitente: por vezes respondia em 3s, por vezes nunca respondia
+   (testado até 100+s sem resposta). `uvicorn.run()` sem `loop=` explícito
+   tenta detectar automaticamente (`uvloop` > `asyncio`), e essa detecção
+   dentro do executável congelado às vezes trava sem lançar exceção —
+   `uvloop` nem existe no Windows. Corrigido fixando `loop="asyncio"`
+   explicitamente em `server.py::main()`.
+
+3. **Catálogo quebrava com o LLM7** (achado no caminho, real):
+   `ProgrammingError: Error binding parameter 4: type 'dict' is not
+   supported`. O LLM7 publica `context_window` como objeto
+   (`{"tokens": N, "chars": null}`), diferente do inteiro simples dos
+   outros provedores — só apareceu agora porque, num `.exe` sem nenhuma
+   chave configurada, o LLM7 (keyless) é o único provedor sondado.
+   Corrigido com `catalog._extrair_contexto()`, testado contra os 48
+   modelos reais do LLM7: 0 erros.
+
+**Verificado de ponta a ponta, com o PM2 explicitamente parado desta
+vez:** instalador silencioso (`/VERYSILENT`) instala sem admin
+(confirmado via `HKCU`); o executável instalado sobe, cria
+`%APPDATA%\Saci` corretamente; `/health` e uma chamada real de chat via
+Groq respondem; 3 execuções consecutivas do `.exe`, todas respondendo
+em exatamente 3s (antes do fix do loop, variava de 3s a mais de 100s);
+desinstalado e reinstalado sem deixar resíduo.
 
 ## Etapa 8 — Documentação e release
 
