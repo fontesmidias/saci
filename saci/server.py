@@ -369,6 +369,14 @@ def get_catalog() -> dict:
     }
 
 
+@app.get("/catalog/events")
+def get_catalog_events(provider: str | None = None) -> dict:
+    """Historico de mudanca de veredito -- 'desde quando o Groq nao e mais gratis'."""
+    from saci import catalog
+
+    return {"events": catalog.events(provider=provider, limit=100)}
+
+
 @app.post("/catalog/refresh")
 def refresh_catalog() -> dict:
     """Dispara uma verificação agora, em segundo plano."""

@@ -265,6 +265,25 @@ def probe(provider: Provider, model: str, *, key: str | None = None) -> tuple[st
 # 4. GUARDAR + 5. REVISAR
 # ---------------------------------------------------------------------
 
+def _registrar_evento(conn: sqlite3.Connection, provider_key: str, model: str,
+                       from_status: str | None, to_status: str, detail: str | None) -> None:
+    """
+    Grava uma mudança de veredito em `provider_events` — o histórico que
+    o painel/CLI usa para responder "desde quando o Groq não é mais
+    grátis?" sem precisar vasculhar `usage.db` na mão.
+
+    A primeira sondagem (`new` -> qualquer coisa) é o julgamento inicial
+    do modelo, não uma mudança de política de ninguém — não vale como
+    evento, ou todo modelo novo entraria como "eis que X ficou pago".
+    """
+    if from_status in (None, "new"):
+        return
+    conn.execute(
+        "INSERT INTO provider_events (ts, provider, model, from_status, to_status, detail)"
+        " VALUES (?,?,?,?,?,?)",
+        (_iso(), provider_key, model, from_status, to_status, detail))
+
+
 def _due_for_probe(row: sqlite3.Row) -> bool:
     st = row["status"]
     if st == "new":
@@ -339,7 +358,7 @@ def refresh_provider(
 
         # Quem não apareceu: conta a falta; duas seguidas -> gone.
         rows = conn.execute(
-            "SELECT model, misses FROM models WHERE provider=? AND status!='gone'",
+            "SELECT model, status, misses FROM models WHERE provider=? AND status!='gone'",
             (provider.key,)).fetchall()
         for r in rows:
             if r["model"] in seen:
@@ -350,6 +369,8 @@ def refresh_provider(
                 conn.execute("UPDATE models SET misses=?, status=?, detail='sumiu do catálogo'"
                              " WHERE provider=? AND model=?",
                              (misses, st, provider.key, r["model"]))
+                _registrar_evento(conn, provider.key, r["model"], r["status"], st,
+                                   "sumiu do catálogo")
             else:
                 conn.execute("UPDATE models SET misses=? WHERE provider=? AND model=?",
                              (misses, provider.key, r["model"]))
@@ -368,10 +389,15 @@ def refresh_provider(
         def work(mid: str) -> None:
             st, detail, ms = probe(provider, mid)
             with _lock, _db() as conn:
+                prev = conn.execute(
+                    "SELECT status FROM models WHERE provider=? AND model=?",
+                    (provider.key, mid)).fetchone()
                 conn.execute(
                     "UPDATE models SET status=?, detail=?, latency_ms=COALESCE(?,latency_ms),"
                     " probes=probes+1, last_probe=? WHERE provider=? AND model=?",
                     (st, detail or None, ms, _iso(), provider.key, mid))
+                if prev and prev["status"] != st:
+                    _registrar_evento(conn, provider.key, mid, prev["status"], st, detail)
             tag = {"ok": "OK", "paid": "pago", "gone": "removido",
                    "ratelimited": "429", "auth": "auth"}.get(st, "erro")
             say(f"[sonda] {provider.label} / {mid}: {tag}"
@@ -450,6 +476,23 @@ def last_refresh_at() -> str | None:
     with _lock, _db() as conn:
         r = conn.execute("SELECT MAX(ts) FROM catalog_runs").fetchone()
     return r[0] if r and r[0] else None
+
+
+def events(*, provider: str | None = None, limit: int = 100) -> list[dict]:
+    """
+    Histórico de mudança de veredito, mais recente primeiro — "o Groq
+    ficou pago em 2026-10-03" em vez de só o status atual em `models`.
+    """
+    with _lock, _db() as conn:
+        if provider:
+            rows = conn.execute(
+                "SELECT * FROM provider_events WHERE provider=?"
+                " ORDER BY ts DESC LIMIT ?", (provider, limit)).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM provider_events ORDER BY ts DESC LIMIT ?",
+                (limit,)).fetchall()
+    return [dict(r) for r in rows]
 
 
 init()

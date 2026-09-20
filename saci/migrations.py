@@ -136,9 +136,33 @@ def _m002_quota_chave_por_modelo(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE quota_v1 RENAME TO quota_legacy_v1")
 
 
+def _m003_provider_events(conn: sqlite3.Connection) -> None:
+    """
+    Histórico de mudança de veredito por modelo (ok -> pago, ok -> removido,
+    etc). `models` só guarda o status ATUAL — sem isto, se o Groq virar
+    pago amanhã, o catálogo atualiza o veredito mas não sobra registro de
+    que era grátis até ontem. Puramente aditiva: tabela nova, nada em
+    `models` muda.
+    """
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS provider_events (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts          TEXT    NOT NULL,
+            provider    TEXT    NOT NULL,
+            model       TEXT    NOT NULL,
+            from_status TEXT,
+            to_status   TEXT    NOT NULL,
+            detail      TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_events_provider
+            ON provider_events(provider, ts);
+    """)
+
+
 MIGRATIONS: list[Migration] = [
     (1, "tabelas base (calls, quota, models, catalog_runs)", _m001_tabelas_base),
     (2, "quota: chave por (provider, model)", _m002_quota_chave_por_modelo),
+    (3, "provider_events: historico de mudanca de veredito", _m003_provider_events),
 ]
 
 

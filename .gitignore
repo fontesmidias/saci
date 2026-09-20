@@ -47,3 +47,7 @@ prefs.json
 # build; build/ e dist/ sao a saida, regenerada a cada build.
 build/
 dist/
+
+# Snapshot local do scripts/watch_free_tiers.py -- estado de comparacao,
+# nao codigo nem documentacao; muda a cada verificacao.
+scripts/.free_tiers_snapshot.md

@@ -6,6 +6,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
+### Added
+- **Provider status history** (`provider_events` table): every time the
+  catalog changes a model's verdict (e.g. `ok` → `paid`, `ok` → `gone`),
+  it's now logged with a timestamp and detail — "since when is Groq no
+  longer free?" is answerable without digging through raw status columns.
+  Exposed via `saci --events`, `GET /catalog/events`. The first probe of a
+  new model (`new` → anything) doesn't count as an event — that's a
+  judgment, not a policy change.
+- **`scripts/watch_free_tiers.py`**: compares the
+  `awesome-ai-free-tiers` README against the last-seen copy and reports
+  whether it changed. Deliberately does *not* try to auto-detect new free
+  providers — there's no reliable way to tell from scraping alone whether
+  a "free" tier secretly requires a credit card or has billing gotchas.
+  It only flags "the text changed, go read it" — a human still decides
+  what's worth testing (with real keys, per Rule R4).
+
 ## [0.2.0] — 2026-09-19
 
 The desktop app. Beta: the installer and packaged `.exe` are new and have

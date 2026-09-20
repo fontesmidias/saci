@@ -6,6 +6,24 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Não lançado]
 
+### Adicionado
+- **Histórico de status por provedor** (tabela `provider_events`): toda
+  vez que o catálogo muda o veredito de um modelo (ex.: `ok` → `pago`,
+  `ok` → `removido`), agora fica registrado com data e detalhe — "desde
+  quando o Groq não é mais grátis?" passa a ter resposta, sem precisar
+  vasculhar as colunas de status cruas. Exposto via `saci --events` e
+  `GET /catalog/events`. A primeira sondagem de um modelo novo (`new` →
+  qualquer coisa) não conta como evento — é um julgamento inicial, não
+  uma mudança de política.
+- **`scripts/watch_free_tiers.py`**: compara o README do
+  `awesome-ai-free-tiers` com a última cópia vista e avisa se mudou.
+  Deliberadamente NÃO tenta detectar sozinho provedores gratuitos novos —
+  não existe forma confiável de saber, só por scraping, se um tier
+  "grátis" exige cartão de crédito escondido ou tem pegadinha de
+  cobrança. Ele só sinaliza "o texto mudou, vá ler" — quem decide o que
+  vale testar (com chave real, conforme a Regra R4) continua sendo uma
+  pessoa.
+
 ## [0.2.0] — 19/09/2026
 
 O aplicativo de desktop. Beta: o instalador e o `.exe` empacotado são novos

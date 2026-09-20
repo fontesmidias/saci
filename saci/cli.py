@@ -147,6 +147,22 @@ def cmd_catalog() -> int:
     return 0
 
 
+def cmd_events() -> int:
+    """Histórico de mudança de veredito por modelo (ok -> pago, ok -> removido...)."""
+    from saci import catalog
+
+    rows = catalog.events(limit=50)
+    if not rows:
+        print("(nenhuma mudança registrada ainda — normal em instalação nova ou recente)")
+        return 0
+    print("HISTORICO DE MUDANCAS  (mais recente primeiro)\n")
+    for r in rows:
+        det = f"  ({r['detail']})" if r["detail"] else ""
+        print(f"  {r['ts']}  {r['provider']:12} {r['model']:40} "
+              f"{r['from_status']} -> {r['to_status']}{det}")
+    return 0
+
+
 def cmd_refresh() -> int:
     """Roda a descoberta + sondagem agora, no terminal."""
     from saci import catalog
@@ -215,12 +231,16 @@ def main() -> int:
     parser.add_argument("--usage", action="store_true", help="consumo e cota por provedor")
     parser.add_argument("--catalog", action="store_true", help="modelos descobertos e veredito")
     parser.add_argument("--refresh", action="store_true", help="descobre e sonda modelos agora")
+    parser.add_argument("--events", action="store_true",
+                         help="historico de mudanca de veredito (quando um modelo virou pago/sumiu)")
     args = parser.parse_args()
 
     if args.usage:
         return cmd_usage()
     if args.catalog:
         return cmd_catalog()
+    if args.events:
+        return cmd_events()
     if args.refresh:
         return cmd_refresh()
     if args.profiles:
