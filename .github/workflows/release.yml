@@ -69,6 +69,16 @@ jobs:
               if ($r.StatusCode -eq 200) { $ok = $true; break }
             } catch {}
           }
+          if (-not $ok) {
+            Write-Output "--- diagnostico: processo ainda vivo? $(-not $proc.HasExited) (ExitCode: $($proc.ExitCode)) ---"
+            $log = "$env:SACI_HOME\logs\saci.log"
+            if (Test-Path $log) {
+              Write-Output "--- $log ---"
+              Get-Content $log
+            } else {
+              Write-Output "--- $log nao existe -- o processo nao chegou a inicializar o logging ---"
+            }
+          }
           Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           if (-not $ok) {
             Write-Error "Saci.exe nao respondeu em /health dentro de 30s -- ver PLAN.md Etapa 7 (bugs de loop=asyncio e do launcher)."
