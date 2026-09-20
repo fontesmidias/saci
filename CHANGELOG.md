@@ -6,12 +6,63 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
-Planned for 0.2.0 — the desktop app:
-- System-tray icon with live quota (`groq 1% · 21:00`) and a native window for the dashboard
-- Settings screen to paste API keys and reorder providers (no more editing `.env`)
-- Data under `%APPDATA%\Saci` (keys, history, catalog) so updates never touch them
-- Log file, start with Windows, "check for updates"
-- Windows installer; the app replaces PM2
+## [0.2.0] — 2026-09-19
+
+The desktop app. Beta: the installer and packaged `.exe` are new and have
+only been tested by the author on one machine — expect rough edges.
+
+### Added
+- **Windows installer** (`Saci.iss`, Inno Setup): installs to
+  `%LOCALAPPDATA%\Programs\Saci`, no administrator rights required. Detects
+  a missing WebView2 Runtime before installing and offers the official
+  download. Uninstall asks before deleting `%APPDATA%\Saci`, and always
+  removes the autostart registry entry so it never points at a deleted `.exe`.
+- **System-tray app** (`saci-app` / `Saci.exe`): a cap-shaped icon that
+  changes color with quota usage (green/amber/red), a native window for the
+  dashboard, and a menu — Open dashboard, Settings, Profile (submenu),
+  Check catalog now, Open logs folder, Start with Windows, Exit. Closing the
+  window only hides it; a second launch detects the running instance (via
+  `/health`, not just the port) and opens the browser to it instead of
+  starting twice.
+- **Settings screen** (`/settings`): paste, test (without saving) and save
+  API keys per provider, with the value always masked back
+  (`gsk_••••f7dR`) — the raw key is never sent back to the browser. Also
+  edits the fallback order, timezone and default profile, previously
+  `.env`-only.
+- **Data moved to `%APPDATA%\Saci`** when running installed: `.env`,
+  `usage.db`, `prefs.json`, `logs/saci.log` (rotating, 2 MB × 3 files). Data
+  from an existing development install is copied — never moved — the first
+  time the packaged app runs.
+- **Versioned database migrations** (`saci/migrations.py`): schema changes
+  are now additive or `RENAME`-based, never `DROP TABLE` — a real bug fixed
+  in the process (`quota`'s old single-`provider` key was being dropped on
+  every startup with a schema change, discarding live quota state).
+- **Start with Windows**, toggled from the tray menu; writes to `HKCU`, no
+  admin needed.
+
+### Fixed
+Two bugs that only manifested inside the packaged `.exe`, invisible in
+every test that ran from source (the packaging step itself is what surfaced
+them):
+- The app crashed silently on startup: `Analysis(["saci/app.py"])` made
+  PyInstaller treat it as a top-level script, breaking every relative
+  import (`from . import paths`) inside it. Fixed with `saci_launcher.py`,
+  a thin entry point outside the `saci` package that imports it normally.
+- The server intermittently never accepted connections (anywhere from 3s to
+  over 100s to respond, unpredictably) because `uvicorn.run()`'s automatic
+  event-loop detection could hang inside the frozen executable. Fixed by
+  passing `loop="asyncio"` explicitly.
+
+Also fixed: the model catalog crashed against LLM7 (`Error binding
+parameter: type 'dict' is not supported`) because that provider reports
+context length as a nested object instead of a plain number.
+
+### Verified
+Installer runs silently and unattended (`/VERYSILENT`) without admin
+rights; the installed executable creates `%APPDATA%\Saci` correctly, serves
+the dashboard and settings pages, and answers real chat requests. Three
+consecutive cold starts of the packaged `.exe` after the asyncio fix: all
+three ready in 3 seconds.
 
 ## [0.1.0] — 2026-09-19
 
@@ -51,5 +102,6 @@ Groq · Google AI Studio · Mistral · NVIDIA NIM · OpenRouter (`:free`) ·
 LLM7.io (keyless) · SambaNova · Hugging Face · Hyperbolic (prepaid credit, flagged).
 Cerebras returns 402 on a free account; SiliconFlow sign-up was not approved.
 
-[Unreleased]: https://github.com/fontesmidias/saci/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/fontesmidias/saci/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/fontesmidias/saci/releases/tag/v0.2.0
 [0.1.0]: https://github.com/fontesmidias/saci/releases/tag/v0.1.0

@@ -35,19 +35,22 @@ uma perna só do folclore brasileiro, que sempre dá um jeito.
 
 ## Começo rápido (Windows)
 
-```powershell
-git clone https://github.com/fontesmidias/saci
-cd saci
-py -m venv .venv
-.venv\Scripts\python.exe -m pip install -e .
-copy .env.example .env        # cole pelo menos uma chave (veja a tabela abaixo)
-saci-on                       # servidor em http://127.0.0.1:8000 — fica de pé via PM2
-saci-panel                    # painel no navegador
-```
+1. Baixe `Saci-Setup-<versão>.exe` em
+   [Releases](https://github.com/fontesmidias/saci/releases) e execute. Não
+   precisa de administrador — instala só para o seu usuário.
+2. **O Windows vai avisar** que o app é de um publicador não reconhecido
+   (SmartScreen — o `.exe` não é assinado digitalmente; veja o
+   [motivo](#instalar-atualizar-desinstalar-windows)). Clique em
+   **Mais informações → Executar assim mesmo**.
+3. Um ícone aparece na bandeja (o gorro vermelho do Saci). Clique nele →
+   **Configurações** para colar pelo menos uma chave de API gratuita (veja a
+   tabela abaixo) — sem precisar editar arquivo `.env` na mão.
+4. Clique no ícone da bandeja de novo → **Abrir painel**.
 
-O `saci-on` precisa do [PM2](https://pm2.keymetrics.io/) (`npm i -g pm2`). Sem ele,
-rode `.venv\Scripts\python.exe server.py` num terminal que você deixe aberto.
-Linux/macOS: `python -m saci.server` — os atalhos `.cmd` ainda são só para Windows.
+Pronto, é toda a configuração. Quem quer rodar a partir do código-fonte — para
+mexer no próprio Saci, ou em Linux/macOS, onde o instalador ainda não existe —
+veja [Rodando a partir do código-fonte](#rodando-a-partir-do-código-fonte-para-desenvolvimento)
+mais abaixo.
 
 ### Chaves gratuitas (sem cartão de crédito)
 
@@ -68,6 +71,11 @@ isso em todos os lugares.
 ---
 
 ## Como usar
+
+Se você instalou pelo `.exe`, as chaves e configurações ficam na tela de
+**Configurações** (ícone da bandeja → Configurações), não num arquivo `.env`
+— cole uma chave, clique em **Testar**, depois em **Salvar**; entra em vigor
+na hora, sem precisar reiniciar nada.
 
 ### No Cline, no Aider ou em qualquer cliente OpenAI
 
@@ -108,7 +116,8 @@ saci --refresh      # descobrir e sondar agora
 
 ### O painel e a barra de status
 
-O `saci-panel` abre `http://127.0.0.1:8000/dashboard`:
+Clique no ícone da bandeja → **Abrir painel** (ou, rodando a partir do
+código-fonte, `saci-panel` abre `http://127.0.0.1:8000/dashboard`):
 
 - barra de cota por provedor, **"reseta às 21:00"** com contagem regressiva ao vivo
 - todo modelo descoberto com seu veredito — `ok`, `pago`, `removido`,
@@ -163,34 +172,73 @@ vai para o *fim* da cascata em vez de ser descartado: se a cota resetou desde a
 
 ## Instalar, atualizar, desinstalar (Windows)
 
-**Hoje (0.1, instalação de desenvolvedor):**
-
 | Tarefa | Como |
 |---|---|
-| Instalar | `git clone` → `py -m venv .venv` → `pip install -e .` → preencher o `.env` |
-| Ligar | `saci-on` (fica em segundo plano via PM2) |
-| Desligar | `saci-off` |
-| Atualizar | `git pull` e depois `saci-off && saci-on` |
-| Desinstalar | `saci-off` e apagar a pasta. Nada é escrito fora dela. |
+| Instalar | Rode `Saci-Setup-<versão>.exe` em [Releases](https://github.com/fontesmidias/saci/releases). Instala em `%LOCALAPPDATA%\Programs\Saci` — sem administrador, sem Python, sem PM2, sem terminal. |
+| Atualizar | Rode o instalador novo por cima do antigo — ele detecta e substitui a instalação anterior. Seus dados em `%APPDATA%\Saci` (chaves, histórico, catálogo) ficam intactos. |
+| Desinstalar | Configurações do Windows → Aplicativos → Saci → Desinstalar. Vai perguntar se você também quer apagar `%APPDATA%\Saci` — diga não se pretende reinstalar depois. |
 
-Suas chaves (`.env`), o histórico (`usage.db`) e as preferências (`prefs.json`)
-ficam na pasta do projeto e nunca são commitados.
+### Por que o Windows avisa sobre o instalador
 
-**A partir da 0.2 (instalador):** baixe o `.exe` em
-[Releases](https://github.com/fontesmidias/saci/releases), dê dois cliques e
-pronto — sem Python, sem PM2, sem terminal. Atualizar e desinstalar passam a ser
-pelas Configurações do Windows → Aplicativos, e seus dados ficam em
-`%APPDATA%\Saci`, a menos que você peça para removê-los.
+O `.exe` não é assinado digitalmente — um certificado de assinatura custa
+cerca de US$ 200/ano, fora do escopo de uma ferramenta gratuita feita por uma
+pessoa só. Por causa disso, **o Windows SmartScreen vai mostrar "O Windows
+protegeu seu PC"** na primeira vez que você (ou qualquer pessoa) executar.
+Isso é esperado, não um sinal de que o arquivo foi adulterado:
+
+1. Clique em **Mais informações**.
+2. Clique em **Executar assim mesmo**.
+
+Se o Saci não conseguir abrir a janela, provavelmente falta o **Microsoft
+Edge WebView2 Runtime** (ele já vem na maioria das máquinas com Windows
+10/11 atualizado, então isso é raro) — o instalador detecta isso e oferece a
+página oficial de download da Microsoft antes de continuar.
 
 ## Planejado
 
-- **0.2 — aplicativo de desktop:** ícone na bandeja, janela nativa, tela de
-  configurações para as chaves, dados em `%APPDATA%`, instalador para Windows.
-  Aposenta o PM2 e os arquivos `.cmd`.
-- Inicializador multiplataforma (Linux/macOS com atalhos de primeira classe).
+- Aposentar de vez o PM2 e os atalhos `.cmd`, assim que o aplicativo de
+  desktop tiver sido testado por mais gente além do autor.
+- Inicializador multiplataforma (Linux/macOS ganham atalhos de primeira
+  classe e, eventualmente, o próprio aplicativo empacotado).
 - Limitador de taxa por modelo, para agentes que disparam requisições em paralelo.
 
 Veja o [CHANGELOG.pt-BR.md](CHANGELOG.pt-BR.md).
+
+## Rodando a partir do código-fonte (para desenvolvimento)
+
+Você não precisa disso para *usar* o Saci — é para contribuir com o próprio
+projeto, ou para Linux/macOS, onde o instalador ainda não existe.
+
+```powershell
+git clone https://github.com/fontesmidias/saci
+cd saci
+py -m venv .venv
+.venv\Scripts\python.exe -m pip install -e .
+copy .env.example .env        # cole pelo menos uma chave
+saci-on                       # servidor em http://127.0.0.1:8000 — fica de pé via PM2
+saci-panel                    # painel no navegador
+```
+
+O `saci-on` precisa do [PM2](https://pm2.keymetrics.io/) (`npm i -g pm2`). Sem
+ele, rode `.venv\Scripts\python.exe server.py` num terminal que você deixe
+aberto. Linux/macOS: `python -m saci.server` — os atalhos `.cmd` são só para
+Windows.
+
+Para gerar o aplicativo de desktop você mesmo, em vez de baixar de um release:
+
+```powershell
+.venv\Scripts\python.exe -m pip install -e ".[desktop,build]"
+.venv\Scripts\python.exe -m PyInstaller saci.spec --noconfirm
+# dist\Saci\Saci.exe agora roda sozinho
+
+# opcional: gerar o instalador tambem (precisa do Inno Setup 6)
+"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" saci.iss
+# Output\Saci-Setup-<versão>.exe
+```
+
+Nesse modo, suas chaves (`.env`), histórico (`usage.db`) e preferências
+(`prefs.json`) ficam na pasta do projeto em vez de `%APPDATA%\Saci`, e nunca
+são commitados (veja `.gitignore`).
 
 ## Como contribuir
 

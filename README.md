@@ -34,19 +34,20 @@ the one-legged trickster of Brazilian folklore who always finds a way.
 
 ## Quick start (Windows)
 
-```powershell
-git clone https://github.com/fontesmidias/saci
-cd saci
-py -m venv .venv
-.venv\Scripts\python.exe -m pip install -e .
-copy .env.example .env        # paste at least one key (see table below)
-saci-on                       # server on http://127.0.0.1:8000 — stays up via PM2
-saci-panel                    # dashboard in your browser
-```
+1. Download `Saci-Setup-<version>.exe` from
+   [Releases](https://github.com/fontesmidias/saci/releases) and run it. No
+   administrator rights needed — it installs for your user only.
+2. **Windows will warn you** the app is from an unrecognized publisher
+   (SmartScreen — the `.exe` isn't code-signed; see [why](#installing-updating-uninstalling-windows)).
+   Click **More info → Run anyway**.
+3. A tray icon appears (Saci's red cap). Click it → **Settings** to paste at
+   least one free API key (see the table below) — no `.env` file to edit by
+   hand.
+4. Click the tray icon again → **Open dashboard**.
 
-`saci-on` needs [PM2](https://pm2.keymetrics.io/) (`npm i -g pm2`). Without it, run
-`.venv\Scripts\python.exe server.py` in a terminal you keep open.
-Linux/macOS: `python -m saci.server` — the `.cmd` shortcuts are Windows-only for now.
+That's the whole setup. Developers who want to run from source instead —
+to hack on Saci itself, or on Linux/macOS where the installer doesn't apply
+yet — see [Running from source](#running-from-source-for-development) below.
 
 ### Free keys (no credit card)
 
@@ -66,6 +67,10 @@ Hyperbolic is supported too but spends **prepaid credit** — Saci flags it ever
 ---
 
 ## Use it
+
+If you installed via `.exe`, keys and settings live in the **Settings**
+screen (tray icon → Settings), not in a `.env` file — paste a key, hit
+**Test**, then **Save**; it's picked up immediately, no restart needed.
 
 ### From Cline, Aider, or any OpenAI client
 
@@ -105,7 +110,8 @@ saci --refresh      # discover + probe now
 
 ### The dashboard and the status bar
 
-`saci-panel` opens `http://127.0.0.1:8000/dashboard`:
+Click the tray icon → **Open dashboard** (or, running from source, `saci-panel`
+opens `http://127.0.0.1:8000/dashboard`):
 
 - quota bar per provider, **"resets at 21:00"** with a live countdown
 - every discovered model with its verdict — `ok`, `paid`, `gone`, `rate-limited` —
@@ -159,33 +165,71 @@ last looked, it still gets its turn.
 
 ## Installing, updating, uninstalling (Windows)
 
-**Today (0.1, developer install):**
-
 | Task | How |
 |---|---|
-| Install | `git clone` → `py -m venv .venv` → `pip install -e .` → fill `.env` |
-| Start | `saci-on` (stays up in the background via PM2) |
-| Stop | `saci-off` |
-| Update | `git pull` then `saci-off && saci-on` |
-| Uninstall | `saci-off`, then delete the folder. Nothing is written outside it. |
+| Install | Run `Saci-Setup-<version>.exe` from [Releases](https://github.com/fontesmidias/saci/releases). Installs to `%LOCALAPPDATA%\Programs\Saci` — no admin rights, no Python, no PM2, no terminal. |
+| Update | Run the new installer over the old one — it detects and replaces the previous install. Your data in `%APPDATA%\Saci` (keys, history, catalog) is untouched. |
+| Uninstall | Windows Settings → Apps → Saci → Uninstall. You'll be asked whether to also delete `%APPDATA%\Saci` — say no if you plan to reinstall later. |
 
-Your keys (`.env`), history (`usage.db`) and preferences (`prefs.json`) live in
-the project folder and are never committed.
+### Why Windows warns you about the installer
 
-**From 0.2 (installer):** download the `.exe` from
-[Releases](https://github.com/fontesmidias/saci/releases), double-click, done —
-no Python, no PM2, no terminal. Updating and uninstalling go through Windows
-Settings → Apps, and your data stays in `%APPDATA%\Saci` unless you ask to
-remove it.
+The `.exe` isn't code-signed — a signing certificate costs about US$200/year,
+which is out of scope for a free tool built by one person. Because of that,
+**Windows SmartScreen will show "Windows protected your PC"** the first time
+you (or anyone) runs it. This is expected, not a sign of tampering:
+
+1. Click **More info**.
+2. Click **Run anyway**.
+
+If Saci can't open its window, you're likely missing the **Microsoft Edge
+WebView2 Runtime** (it ships with most up-to-date Windows 10/11 machines, so
+this is rare) — the installer detects this and offers the official Microsoft
+download page before proceeding.
 
 ## Roadmap
 
-- **0.2 — desktop app:** system-tray icon, native window, settings screen for keys,
-  data in `%APPDATA%`, Windows installer. Replaces PM2 and the `.cmd` files.
-- Cross-platform launcher (Linux/macOS get first-class shortcuts).
+- Retire PM2 and the `.cmd` shortcuts entirely once the desktop app has been
+  tested by more people than just the author.
+- Cross-platform launcher (Linux/macOS get first-class shortcuts and,
+  eventually, their own packaged app).
 - Per-model rate limiter for agents that fire parallel requests.
 
 See [CHANGELOG.md](CHANGELOG.md).
+
+## Running from source (for development)
+
+You don't need this to *use* Saci — it's for contributing to Saci itself, or
+for Linux/macOS where the installer doesn't exist yet.
+
+```powershell
+git clone https://github.com/fontesmidias/saci
+cd saci
+py -m venv .venv
+.venv\Scripts\python.exe -m pip install -e .
+copy .env.example .env        # paste at least one key
+saci-on                       # server on http://127.0.0.1:8000 — stays up via PM2
+saci-panel                    # dashboard in your browser
+```
+
+`saci-on` needs [PM2](https://pm2.keymetrics.io/) (`npm i -g pm2`). Without it,
+run `.venv\Scripts\python.exe server.py` in a terminal you keep open.
+Linux/macOS: `python -m saci.server` — the `.cmd` shortcuts are Windows-only.
+
+To build the desktop app yourself instead of downloading a release:
+
+```powershell
+.venv\Scripts\python.exe -m pip install -e ".[desktop,build]"
+.venv\Scripts\python.exe -m PyInstaller saci.spec --noconfirm
+# dist\Saci\Saci.exe now runs standalone
+
+# optional: build the installer too (needs Inno Setup 6)
+"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" saci.iss
+# Output\Saci-Setup-<version>.exe
+```
+
+In this mode your keys (`.env`), history (`usage.db`) and preferences
+(`prefs.json`) live in the project folder instead of `%APPDATA%\Saci`, and are
+never committed (see `.gitignore`).
 
 ## Contributing
 

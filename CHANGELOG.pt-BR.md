@@ -6,12 +6,67 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Não lançado]
 
-Planejado para a 0.2.0 — o aplicativo de desktop:
-- Ícone na bandeja com a cota ao vivo (`groq 1% · 21:00`) e janela nativa para o painel
-- Tela de configurações para colar as chaves de API e reordenar provedores (sem editar `.env`)
-- Dados em `%APPDATA%\Saci` (chaves, histórico, catálogo), para que atualizações nunca os toquem
-- Arquivo de log, iniciar com o Windows, "verificar atualizações"
-- Instalador para Windows; o aplicativo substitui o PM2
+## [0.2.0] — 19/09/2026
+
+O aplicativo de desktop. Beta: o instalador e o `.exe` empacotado são novos
+e só foram testados pelo autor numa máquina — espere arestas.
+
+### Adicionado
+- **Instalador para Windows** (`saci.iss`, Inno Setup): instala em
+  `%LOCALAPPDATA%\Programs\Saci`, sem exigir administrador. Detecta a
+  ausência do WebView2 Runtime antes de instalar e oferece o download
+  oficial. Ao desinstalar, pergunta antes de apagar `%APPDATA%\Saci`, e
+  sempre remove a entrada de autostart no registro, para nunca deixar uma
+  chave apontando para um `.exe` que já não existe.
+- **Aplicativo na bandeja** (`saci-app` / `Saci.exe`): um ícone em forma de
+  gorro que muda de cor conforme o uso da cota (verde/amarelo/vermelho),
+  janela nativa para o painel, e um menu — Abrir painel, Configurações,
+  Perfil (submenu), Verificar catálogo agora, Abrir pasta de logs, Iniciar
+  com o Windows, Sair. Fechar a janela só a esconde; uma segunda execução
+  detecta a instância já em uso (via `/health`, não só a porta) e abre o
+  navegador nela em vez de iniciar duas vezes.
+- **Tela de configurações** (`/settings`): cola, testa (sem salvar) e salva
+  chaves de API por provedor, com o valor sempre mascarado de volta
+  (`gsk_••••f7dR`) — a chave nunca é reenviada ao navegador em texto puro.
+  Também edita a ordem da cascata, o fuso horário e o perfil padrão, antes
+  só editáveis no `.env`.
+- **Dados movidos para `%APPDATA%\Saci`** quando instalado: `.env`,
+  `usage.db`, `prefs.json`, `logs/saci.log` (com rotação, 2 MB × 3
+  arquivos). Dados de uma instalação de desenvolvimento existente são
+  copiados — nunca movidos — na primeira vez que o app empacotado roda.
+- **Migrações de banco versionadas** (`saci/migrations.py`): mudanças de
+  schema agora são aditivas ou baseadas em `RENAME`, nunca `DROP TABLE` —
+  um bug real corrigido no processo (a chave antiga de `quota`, só por
+  `provider`, era descartada a cada mudança de schema, apagando o estado
+  de cota em uso).
+- **Iniciar com o Windows**, alternável pelo menu da bandeja; grava em
+  `HKCU`, sem precisar de administrador.
+
+### Corrigido
+Dois bugs que só se manifestavam dentro do `.exe` empacotado, invisíveis em
+qualquer teste rodado a partir do código-fonte (foi o próprio processo de
+empacotamento que os revelou):
+- O app crashava silenciosamente ao iniciar: `Analysis(["saci/app.py"])`
+  fazia o PyInstaller tratá-lo como script top-level, quebrando todo import
+  relativo (`from . import paths`) dentro dele. Corrigido com
+  `saci_launcher.py`, um ponto de entrada fino fora do pacote `saci` que o
+  importa normalmente.
+- O servidor às vezes nunca aceitava conexões (de 3s a mais de 100s para
+  responder, de forma imprevisível), porque a detecção automática de loop
+  de eventos do `uvicorn.run()` podia travar dentro do executável
+  congelado. Corrigido passando `loop="asyncio"` explicitamente.
+
+Também corrigido: o catálogo de modelos quebrava contra o LLM7 (`Error
+binding parameter: type 'dict' is not supported`) porque esse provedor
+informa o tamanho de contexto como um objeto aninhado em vez de um número
+simples.
+
+### Verificado
+O instalador roda de forma silenciosa e desatendida (`/VERYSILENT`) sem
+precisar de administrador; o executável instalado cria `%APPDATA%\Saci`
+corretamente, serve o painel e a tela de configurações, e responde
+requisições reais de chat. Três inicializações consecutivas do `.exe`
+empacotado depois do fix do asyncio: as três prontas em 3 segundos.
 
 ## [0.1.0] — 19/09/2026
 
@@ -57,5 +112,6 @@ LLM7.io (sem chave) · SambaNova · Hugging Face · Hyperbolic (crédito pré-pa
 sinalizado). O Cerebras devolve 402 em conta gratuita; o cadastro no SiliconFlow
 não foi aprovado.
 
-[Não lançado]: https://github.com/fontesmidias/saci/compare/v0.1.0...HEAD
+[Não lançado]: https://github.com/fontesmidias/saci/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/fontesmidias/saci/releases/tag/v0.2.0
 [0.1.0]: https://github.com/fontesmidias/saci/releases/tag/v0.1.0

@@ -15,7 +15,9 @@
 ;     (chaves, histórico, catálogo) -- nunca apaga sem perguntar
 
 #define MyAppName "Saci"
-#define MyAppVersion "0.2.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "0.2.0"
+#endif
 #define MyAppPublisher "Bruno Fontes"
 #define MyAppURL "https://github.com/fontesmidias/saci"
 #define MyAppExeName "Saci.exe"

@@ -1,0 +1,96 @@
+name: Release
+
+# Roda só quando uma tag vNN.NN.NN é publicada -- empacota o app de
+# desktop no Windows e anexa o instalador ao GitHub Release já criado
+# para essa tag (ver PLAN.md, Etapa 8).
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+    # O padrão do repositório é GITHUB_TOKEN só-leitura; softprops/action-gh-release
+    # precisa de escrita em "contents" para anexar o instalador ao release.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # check_rules varre o histórico
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install do projeto + extras de empacotamento
+        run: python -m pip install -e ".[desktop,build]"
+
+      - name: Regras invioláveis (CLAUDE.md)
+        run: python scripts/check_rules.py
+
+      - name: Gerar o ícone (saci/saci.ico)
+        run: python scripts/build_icon.py
+
+      - name: Empacotar com PyInstaller
+        run: python -m PyInstaller saci.spec --noconfirm
+
+      - name: Verificação de tamanho (meta 70 MB)
+        shell: pwsh
+        run: |
+          $tamanho = (Get-ChildItem -Recurse dist\Saci | Measure-Object -Property Length -Sum).Sum / 1MB
+          Write-Output "dist\Saci: $([math]::Round($tamanho, 1)) MB"
+          if ($tamanho -gt 70) {
+            Write-Error "Acima da meta de 70 MB -- revise as exclusões em saci.spec antes de liberar."
+            exit 1
+          }
+
+      - name: Fumaça do .exe empacotado
+        shell: pwsh
+        run: |
+          $env:SACI_HOME = "$env:RUNNER_TEMP\saci-ci-home"
+          $proc = Start-Process -FilePath "dist\Saci\Saci.exe" -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Seconds 1
+            try {
+              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
+              if ($r.StatusCode -eq 200) { $ok = $true; break }
+            } catch {}
+          }
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          if (-not $ok) {
+            Write-Error "Saci.exe nao respondeu em /health dentro de 30s -- ver PLAN.md Etapa 7 (bugs de loop=asyncio e do launcher)."
+            exit 1
+          }
+          Write-Output "Saci.exe respondeu normalmente."
+
+      - name: Instalar o Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Extrair a versão da tag
+        id: versao
+        shell: bash
+        run: echo "versao=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Compilar o instalador
+        shell: pwsh
+        run: |
+          # O caminho de instalação do Inno Setup via choco varia entre
+          # runners (Program Files vs. Program Files (x86)) — procura em
+          # vez de fixar um caminho, para não falhar silenciosamente.
+          $iscc = Get-ChildItem -Path "C:\Program Files*\Inno Setup 6\ISCC.exe" -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $iscc) {
+            Write-Error "ISCC.exe não encontrado após 'choco install innosetup'."
+            exit 1
+          }
+          Write-Output "Usando: $iscc"
+          & $iscc "/DMyAppVersion=${{ steps.versao.outputs.versao }}" saci.iss
+
+      - name: Publicar no GitHub Release desta tag
+        uses: softprops/action-gh-release@v3
+        with:
+          files: Output/Saci-Setup-*.exe
+          fail_on_unmatched_files: true

@@ -359,13 +359,42 @@ desinstalado e reinstalado sem deixar resíduo.
 
 ## Etapa 8 — Documentação e release
 
-- [ ] README **e** README.pt-BR: seção de instalação reescrita (baixar o `.exe`
-      primeiro; instalação por código vira "para desenvolvedores"), aviso do
-      SmartScreen, como atualizar e desinstalar
-- [ ] CHANGELOG **e** CHANGELOG.pt-BR: mover de *Unreleased* para `0.2.0`
-- [ ] CI: job que empacota no Windows e anexa o `.exe` ao release na tag
-- [ ] Tag `v0.2.0`, release com o instalador anexado
-- [ ] `scripts/check_rules.py` verde antes de cada commit
+- [x] README **e** README.pt-BR: seção de instalação reescrita (baixar o
+      `.exe` primeiro; instalação por código virou "Running from source /
+      Rodando a partir do código-fonte", seção própria para
+      desenvolvedores), aviso do SmartScreen com o passo exato ("Mais
+      informações → Executar assim mesmo"), como atualizar e desinstalar.
+      Adicionadas notas sobre a tela de Settings nas seções de uso
+- [x] CHANGELOG **e** CHANGELOG.pt-BR: `[Unreleased]` esvaziado, entrada
+      `[0.2.0]` completa com Added/Fixed/Verified — incluindo os 2 bugs
+      críticos e a correção do LLM7, com honestidade sobre o que
+      aconteceu (não só a lista de features)
+- [x] CI (`.github/workflows/release.yml`): dispara em tags `v*.*.*`,
+      instala extras `[desktop,build]`, roda `check_rules.py`, empacota,
+      **verifica o tamanho** (falha acima de 70 MB), sobe o `.exe` e
+      testa `/health` de verdade antes de seguir, instala Inno Setup via
+      choco, compila o instalador com a versão da tag, publica no
+      Release via `softprops/action-gh-release@v3`
+- [ ] Tag `v0.2.0`, release com o instalador anexado — **próximo passo,
+      fora deste commit** (R8: tag só quando o marco fecha de verdade,
+      depois do CI de release confirmar verde)
+- [x] `scripts/check_rules.py` verde antes de cada commit desta etapa
+
+**Dois problemas encontrados escrevendo o workflow, corrigidos antes de
+rodar no CI de verdade:**
+- Nome de step `Verificação de tamanho (meta: 70 MB)` quebrava o parser
+  YAML — o `:` dentro do texto, mesmo entre parênteses e sem aspas, é lido
+  como separador de mapeamento. Corrigido removendo o `:`.
+- `softprops/action-gh-release` precisa de `contents: write`; o padrão do
+  repositório é `GITHUB_TOKEN` só-leitura (confirmado via
+  `gh api .../actions/permissions/workflow`). Adicionado o bloco
+  `permissions:` escopado a este job. Também fixado `@v3` (a `@v2` está
+  descontinuada) e confirmado que a action cria o Release sozinha ao
+  disparar por tag — não precisa criar um Release manual antes.
+- O caminho de instalação do Inno Setup via Chocolatey varia entre
+  `Program Files` e `Program Files (x86)` conforme o runner; o workflow
+  procura o `ISCC.exe` em vez de fixar um caminho, para não falhar
+  silenciosamente se o caminho for o outro.
 
 ---
 
