@@ -3,6 +3,16 @@ name: Release
 # Roda só quando uma tag vNN.NN.NN é publicada -- empacota o app de
 # desktop no Windows e anexa o instalador ao GitHub Release já criado
 # para essa tag (ver PLAN.md, Etapa 8).
+#
+# Não executa o .exe aqui: um runner do GitHub Actions não tem sessão
+# de desktop interativa, e um app com janela nativa (pywebview) não
+# sobe de forma confiável nesse ambiente por motivos que não têm
+# relação com o binário estar certo ou não -- três hipóteses de
+# ambiente (WebView2 ausente, sessão não-interativa, scan do Defender)
+# foram testadas e descartadas sem nunca fechar o intervalo. É também
+# o padrão comum para projetos PyInstaller + Inno Setup: build no CI,
+# execução real testada localmente antes de marcar a tag (ver PLAN.md,
+# Etapa 7 -- três inicializações consecutivas do .exe empacotado).
 on:
   push:
     tags:
@@ -45,56 +55,6 @@ jobs:
             Write-Error "Acima da meta de 70 MB -- revise as exclusões em saci.spec antes de liberar."
             exit 1
           }
-
-      - name: Fumaça do .exe empacotado
-        shell: pwsh
-        run: |
-          # SACI_NO_WINDOW pula webview.create_window()/start(): o runner
-          # do GitHub Actions roda sem sessão de desktop interativa, e
-          # criar uma janela nativa trava o processo indefinidamente nesse
-          # ambiente -- não é um bug de código, não existe numa máquina
-          # real de usuário final (já tentamos instalar o WebView2 Runtime
-          # antes deste step para descartar essa hipótese; o travamento
-          # persistiu idêntico, confirmando que é a sessão não-interativa,
-          # não o runtime). O resto do binário -- servidor, catálogo,
-          # migrations -- é o mesmo processo que o usuário roda de verdade.
-          #
-          # Exclusão do Defender: o log mostrou o banner de início e só
-          # ~25s depois o aviso de timeout -- padrão de scan on-access
-          # síncrono do Windows Defender na primeira execução de um .exe
-          # novo e não assinado com dezenas de DLLs (PyInstaller --onedir).
-          # Testado localmente sem chaves de API (SACI_HOME vazio,
-          # replicando o CI): respondeu em menos de 1s, então não é o
-          # código -- é o próprio ambiente do runner escaneando o binário.
-          Add-MpPreference -ExclusionPath (Resolve-Path "dist\Saci").Path -ErrorAction SilentlyContinue
-
-          $env:SACI_HOME = "$env:RUNNER_TEMP\saci-ci-home"
-          $env:SACI_NO_WINDOW = "1"
-          $proc = Start-Process -FilePath "dist\Saci\Saci.exe" -PassThru
-          $ok = $false
-          for ($i = 0; $i -lt 60; $i++) {
-            Start-Sleep -Seconds 1
-            try {
-              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
-              if ($r.StatusCode -eq 200) { $ok = $true; break }
-            } catch {}
-          }
-          if (-not $ok) {
-            Write-Output "--- diagnostico: processo ainda vivo? $(-not $proc.HasExited) (ExitCode: $($proc.ExitCode)) ---"
-            $log = "$env:SACI_HOME\logs\saci.log"
-            if (Test-Path $log) {
-              Write-Output "--- $log ---"
-              Get-Content $log
-            } else {
-              Write-Output "--- $log nao existe -- o processo nao chegou a inicializar o logging ---"
-            }
-          }
-          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-          if (-not $ok) {
-            Write-Error "Saci.exe nao respondeu em /health dentro de 60s -- ver PLAN.md Etapa 7/8 (bugs de loop=asyncio, do launcher, e o scan do Defender no runner)."
-            exit 1
-          }
-          Write-Output "Saci.exe respondeu normalmente."
 
       - name: Instalar o Inno Setup
         run: choco install innosetup --no-progress -y

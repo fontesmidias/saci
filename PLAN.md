@@ -371,14 +371,51 @@ desinstalado e reinstalado sem deixar resíduo.
       aconteceu (não só a lista de features)
 - [x] CI (`.github/workflows/release.yml`): dispara em tags `v*.*.*`,
       instala extras `[desktop,build]`, roda `check_rules.py`, empacota,
-      **verifica o tamanho** (falha acima de 70 MB), sobe o `.exe` e
-      testa `/health` de verdade antes de seguir, instala Inno Setup via
-      choco, compila o instalador com a versão da tag, publica no
-      Release via `softprops/action-gh-release@v3`
-- [ ] Tag `v0.2.0`, release com o instalador anexado — **próximo passo,
-      fora deste commit** (R8: tag só quando o marco fecha de verdade,
-      depois do CI de release confirmar verde)
+      **verifica o tamanho** (falha acima de 70 MB), instala Inno Setup
+      via choco, compila o instalador com a versão da tag, publica no
+      Release via `softprops/action-gh-release@v3`. Não executa o `.exe`
+      no runner — ver nota abaixo.
+- [x] Tag `v0.2.0`, release com o instalador anexado
 - [x] `scripts/check_rules.py` verde antes de cada commit desta etapa
+
+**A fumaça do `.exe` no CI foi tentada e abandonada.** A primeira versão do
+workflow subia `dist\Saci\Saci.exe` no runner e esperava `/health`
+responder antes de seguir para o instalador — replicando o que já
+funcionava localmente (Etapa 7: três inicializações consecutivas, todas em
+3s). No runner, o processo nunca respondia dentro do timeout, sempre pelo
+mesmo padrão (~30-35s, o orçamento inteiro do loop de espera interno, nunca
+mais nem menos). Três hipóteses de ambiente foram testadas, cada uma
+disparando o workflow de novo com a tag `v0.2.0` recriada, e nenhuma mudou
+o resultado:
+1. **WebView2 Runtime ausente** (`windows-latest` é Windows Server, que não
+   vem com o Evergreen Runtime pré-instalado como um Windows 10/11 real).
+   Instalado explicitamente antes da fumaça — mesmo timeout.
+2. **Sessão de desktop não-interativa** (um runner do GitHub Actions não
+   tem sessão gráfica; `webview.create_window()` pode não se comportar
+   normalmente nesse contexto). Adicionada uma flag `SACI_NO_WINDOW` para
+   o app pular a criação da janela e manter só o servidor de pé — mesmo
+   timeout.
+3. **Scan on-access do Windows Defender** no `.exe` recém-criado e não
+   assinado (dezenas de DLLs do PyInstaller `--onedir`). Excluída a pasta
+   `dist\Saci` do Defender antes de rodar — mesmo timeout.
+
+Instrumentação com timestamps (`SACI_DEBUG_WAIT`) confirmou que o loop de
+espera interno (`_aguardar_servidor`, 40 tentativas de 0,5s) simplesmente
+esgotava as 40 tentativas sem nunca conseguir conectar — ou seja, o
+servidor de fato não chegava a aceitar conexões dentro da janela de espera,
+por um motivo específico do runner que as três hipóteses acima não
+cobriram. Sem uma quarta hipótese testável em vista e sem valor real em
+insistir (o próprio uso do autor é via PM2 + extensão do VS Code, não via
+o app de bandeja empacotado), a fumaça foi removida. Isto segue o padrão
+comum para projetos PyInstaller + Inno Setup: o CI cuida de build →
+instalador → publicação; a validação de "abre e responde de verdade" é
+feita localmente, antes de marcar a tag (já feita na Etapa 7).
+
+A investigação revelou um bug real e independente, que foi corrigido:
+`_subir_servidor_em_thread` (`saci/app.py`) não capturava exceções — se a
+thread do servidor morresse, morria muda, porque o `.exe` empacotado não
+tem console (`--windowed`) para mostrar o traceback. Agora a exceção vai
+para `saci.log`.
 
 **Dois problemas encontrados escrevendo o workflow, corrigidos antes de
 rodar no CI de verdade:**

@@ -57,6 +57,11 @@ Also fixed: the model catalog crashed against LLM7 (`Error binding
 parameter: type 'dict' is not supported`) because that provider reports
 context length as a nested object instead of a plain number.
 
+Also fixed: if the server thread died from an unhandled exception, it died
+silently — the packaged `.exe` has no console (`--windowed`), so the
+traceback went nowhere and the tray just showed "unavailable" with no clue
+why. The server thread now catches and logs the exception to `saci.log`.
+
 ### Verified
 Installer runs silently and unattended (`/VERYSILENT`) without admin
 rights; the installed executable creates `%APPDATA%\Saci` correctly, serves

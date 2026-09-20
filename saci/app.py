@@ -16,7 +16,6 @@ Uso:
 
 from __future__ import annotations
 
-import os
 import socket
 import threading
 import time
@@ -323,9 +322,18 @@ class SaciApp:
 
 def _subir_servidor_em_thread(porta: int) -> None:
     from . import server
-    threading.Thread(
-        target=server.main, kwargs={"port": porta}, name="saci-server", daemon=True,
-    ).start()
+
+    def alvo() -> None:
+        try:
+            server.main(port=porta)
+        except Exception:
+            # Sem isto, uma exceção aqui mata a thread em silêncio: o
+            # .exe não tem console (--windowed), então o traceback não
+            # vai a lugar nenhum e a bandeja só mostra "indisponível"
+            # sem dizer por quê. Com isto, ao menos fica em saci.log.
+            _logger.exception("servidor: thread morreu com uma exceção")
+
+    threading.Thread(target=alvo, name="saci-server", daemon=True).start()
 
 
 def _aguardar_servidor(porta: int, tentativas: int = 40) -> bool:
@@ -351,18 +359,6 @@ def main() -> None:
     _subir_servidor_em_thread(porta)
     if not _aguardar_servidor(porta):
         _logger.warning("servidor não respondeu a tempo na porta %s; abrindo mesmo assim.", porta)
-
-    if os.environ.get("SACI_NO_WINDOW"):
-        # Usado só pela fumaça do .exe empacotado no CI (ver release.yml):
-        # runners do GitHub Actions rodam sem sessão de desktop
-        # interativa, e criar uma janela nativa (webview.create_window)
-        # trava indefinidamente nesse ambiente, sem relação com bug de
-        # código — não existe em máquina real de usuário final. Mantém o
-        # servidor de pé, sem bandeja nem janela, até o processo ser
-        # encerrado externamente.
-        _logger.info("SACI_NO_WINDOW ativo — servidor de pé sem janela/bandeja.")
-        threading.Event().wait()
-        return
 
     SaciApp(porta).run()
 

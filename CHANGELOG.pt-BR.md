@@ -61,6 +61,12 @@ binding parameter: type 'dict' is not supported`) porque esse provedor
 informa o tamanho de contexto como um objeto aninhado em vez de um número
 simples.
 
+Também corrigido: se a thread do servidor morresse por uma exceção não
+tratada, ela morria em silêncio — o `.exe` empacotado não tem console
+(`--windowed`), então o traceback não ia a lugar nenhum e a bandeja só
+mostrava "indisponível" sem dizer o motivo. Agora a thread do servidor
+captura e registra a exceção em `saci.log`.
+
 ### Verificado
 O instalador roda de forma silenciosa e desatendida (`/VERYSILENT`) sem
 precisar de administrador; o executável instalado cria `%APPDATA%\Saci`
