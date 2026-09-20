@@ -141,26 +141,70 @@ O que hoje exige editar `.env` na mão.
 enquanto o servidor estiver em `127.0.0.1`; se um dia houver modo rede,
 `/api/settings/*` fica de fora.
 
-## Etapa 4 — Bandeja + janela (`saci/app.py`)
+## Etapa 4 — Bandeja + janela (`saci/app.py`) ✅ concluída
 
 O executável em si. Um processo: servidor (thread) + bandeja + janela.
 
-- [ ] Ícone desenhado em código (`pillow`), sem arquivo externo:
+- [x] Ícone desenhado em código (`pillow`), sem arquivo externo:
       gorro vermelho; **cinza** quando o servidor está caído, **amarelo**
       acima de 70 % da cota, **vermelho** acima de 90 %
-- [ ] Texto do ícone (tooltip) atualizado a cada 30 s: `groq 1% · reseta 21:00`
-- [ ] Menu: Abrir painel · Configurações · Perfil ▸ (submenu com os perfis) ·
-      Verificar catálogo · Abrir logs · Iniciar com o Windows (alternável) · Sair
-- [ ] Janela `pywebview` 1100×780 apontando para `http://127.0.0.1:<porta>/dashboard`
-- [ ] **Fechar a janela não encerra o app** — só esconde; sair é pelo menu
-- [ ] Segunda instância: detectar (socket na porta) e apenas mostrar a janela
-- [ ] Porta: tentar 8000; se ocupada, subir para a próxima livre e gravar a
-      escolhida em `prefs.json` (a extensão do VSCode lê de lá)
+- [x] Texto do ícone (tooltip) atualizado a cada 30 s: `Saci — groq 4% · reseta em 1.8s`
+      (o formato final usa `reset_in` de `/status`, não exatamente
+      "reseta HH:MM" — ajustar se quiser a hora de relógio aqui também)
+- [x] Menu: Abrir painel · Configurações · Perfil ▸ (submenu com os perfis,
+      lido de `/prefs` a cada abertura) · Verificar catálogo agora ·
+      Abrir pasta de logs · Iniciar com o Windows (**desabilitado, "em
+      breve"** — é a Etapa 5) · Sair
+- [x] Janela `pywebview` 1100×780 apontando para `http://127.0.0.1:<porta>/dashboard`
+- [x] **Fechar a janela não encerra o app** — só esconde; sair é pelo menu
+      (ver bug encontrado abaixo — funciona, mas não do jeito óbvio)
+- [x] Segunda instância: `escolher_porta()` detecta via `/health` que já é
+      o Saci (não confunde com outro programa na mesma porta) e abre o
+      navegador na instância existente em vez de subir uma nova
+- [x] Porta: tenta 8000..8010; grava a escolhida em `prefs.json`
+      (`port`) — é de lá que outros clientes locais devem ler
 
-**Já validado nesta máquina:** `pystray` e `pywebview` disputam o laço
-principal no Windows, mas convivem com este padrão — `webview.start()` na
-thread principal e `tray.run()` numa thread separada (testado: os dois subiram
-e encerraram juntos). Use exatamente essa ordem; invertê-la trava.
+**Validado nesta máquina antes de escrever o módulo:** `pystray` e
+`pywebview` convivem com `webview.start()` na thread principal e
+`tray.run()` em thread separada.
+
+**Dois bugs reais encontrados TESTANDO esta etapa** (não no smoke test
+anterior — só apareceram com o app completo rodando de ponta a ponta):
+
+1. **`_porta_livre()` dava falso positivo.** Usava
+   `socket.connect_ex()` com timeout de 0.3s; depois de importar
+   `pystray`/`webview` o processo fica pesado o bastante para o
+   `connect_ex` devolver `WSAEWOULDBLOCK` (10035, "ainda tentando") em
+   vez de completar a conexão a tempo — e o código tratava qualquer
+   erro `!= 0` como "porta livre". Corrigido trocando para `bind()`
+   sem `SO_REUSEADDR`: falha síncrona e inequívoca se a porta já está
+   em `LISTEN` por outro processo. Testado com um processo real
+   escutando em 8000: antes do fix, dizia "livre"; depois, "ocupada",
+   e escolhia 8001 corretamente.
+
+2. **`destroy()` nunca destruía a janela.** `webview.Window.destroy()`
+   dispara o MESMO evento `closing` que o clique no X do usuário. O
+   handler que eu já tinha para "clicar no X só esconde" (retorna
+   `False` sempre) estava cancelando também o `.destroy()` programático
+   — `app.run()` nunca retornava, o processo ficava vivo para sempre
+   depois de "Sair". Corrigido com um flag `self._saindo`: o handler só
+   cancela o fechamento quando `_saindo` é `False`; `_sair()` marca o
+   flag antes de chamar `destroy()`. Confirmado lendo o código-fonte do
+   backend Windows do pywebview (`winforms.py::on_closing`) antes de
+   escrever a correção, não só testando até "parecer" funcionar.
+
+**Verificado de ponta a ponta com o servidor REAL** (catálogo, settings,
+tudo — não um mock): app sobe, janela mostra em ~2,6s, chamada de chat
+real responde via Groq em 1,3s, `/status` alimenta a cor do ícone
+corretamente (verde, 3,6% de uso), menu monta, `_sair()` encerra tudo em
+0,7s e o processo Python termina por completo alguns segundos depois
+(threads de rede/GUI levam um instante extra para limpar). Log revisado:
+nenhuma chave vazou durante o teste.
+
+**Dependências novas:** `pywebview`, `pystray`, `pillow` — extra opcional
+`desktop` em `pyproject.toml` (não instalado por padrão; quem só usa o
+servidor via PM2 não precisa deles). `saci/server.py::main()` ganhou um
+parâmetro `port` (era fixo em 8000) para o app poder escolher a porta.
 
 ## Etapa 5 — Iniciar com o Windows
 

@@ -570,7 +570,14 @@ def chat_completions(req: ChatRequest):
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-def main() -> None:
+DEFAULT_PORT = 8000
+
+
+def main(port: int = DEFAULT_PORT) -> None:
+    """
+    Sobe o servidor. Bloqueia até o processo (ou a thread, se chamado
+    pela Etapa 4 — bandeja/janela em saci/app.py) ser encerrado.
+    """
     import uvicorn
 
     from saci import paths
@@ -579,7 +586,7 @@ def main() -> None:
         "=" * 58,
         "  Saci — servidor local",
         "=" * 58,
-        "  Base URL : http://127.0.0.1:8000/v1",
+        f"  Base URL : http://127.0.0.1:{port}/v1",
         "  API Key  : qualquer valor (nao e verificada)",
         f"  Modelos  : {', '.join(MODEL_PREFIX + p for p in PROFILES)}",
         f"  Dados    : {paths.data_dir()}",
@@ -589,7 +596,7 @@ def main() -> None:
     for linha in banner:
         _log(linha)
 
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
 
 if __name__ == "__main__":

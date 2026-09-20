@@ -44,10 +44,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["ruff>=0.6"]
+desktop = ["pywebview>=6.2", "pystray>=0.19", "pillow>=11"]
 
 [project.scripts]
 saci = "saci.cli:main"
 saci-server = "saci.server:main"
+saci-app = "saci.app:main"
 
 [project.urls]
 Homepage = "https://github.com/fontesmidias/saci"
