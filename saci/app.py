@@ -101,12 +101,29 @@ def escolher_porta() -> tuple[int, bool]:
 # Ícone (desenhado em memória — sem arquivo .ico externo)
 # ---------------------------------------------------------------------
 
-def _desenhar_icone(cor: tuple[int, int, int]) -> Image.Image:
-    """O gorro do Saci: um círculo vermelho (ou da cor do estado) com um pompom branco."""
-    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+def _desenhar_icone(cor: tuple[int, int, int], tamanho: int = 64) -> Image.Image:
+    """
+    O gorro do Saci: um cone inclinado (a silhueta clássica do gorro),
+    com um pompom branco no topo. Parametrizado por `tamanho` para
+    servir tanto o ícone da bandeja (64px) quanto o `.ico` do
+    executável, que precisa de resoluções maiores (ver
+    scripts/build_icon.py).
+    """
+    img = Image.new("RGBA", (tamanho, tamanho), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.ellipse((6, 10, 58, 62), fill=cor)          # gorro
-    d.ellipse((22, 2, 42, 22), fill=(255, 255, 255))  # pompom
+    e = tamanho / 64  # escala: as coordenadas abaixo foram desenhadas para 64px
+
+    gorro = [
+        (16 * e, 58 * e),
+        (13 * e, 34 * e),
+        (36 * e, 14 * e),   # ponta
+        (50 * e, 34 * e),
+        (47 * e, 58 * e),
+    ]
+    d.polygon(gorro, fill=cor)
+    d.ellipse((11 * e, 52 * e, 51 * e, 62 * e), fill=cor)                 # aba/base
+    d.ellipse((38 * e, 2 * e, 54 * e, 18 * e), fill=(255, 255, 255))      # pompom
+
     return img
 
 

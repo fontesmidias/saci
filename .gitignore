@@ -41,3 +41,9 @@ usage.pre-m*.db
 
 # Preferencias de runtime (perfil ativo, trava manual)
 prefs.json
+
+# Artefatos do PyInstaller (gerados por: py -m PyInstaller saci.spec)
+# saci.spec E saci/saci.ico SAO versionados -- sao o "codigo-fonte" da
+# build; build/ e dist/ sao a saida, regenerada a cada build.
+build/
+dist/

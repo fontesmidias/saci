@@ -45,6 +45,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["ruff>=0.6"]
 desktop = ["pywebview>=6.2", "pystray>=0.19", "pillow>=11"]
+build = ["pyinstaller>=6.22"]
 
 [project.scripts]
 saci = "saci.cli:main"

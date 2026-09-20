@@ -239,15 +239,51 @@ confirmada ao final:
    antes, liga/desliga corretamente através do próprio callback do
    item, e o registro termina limpo
 
-## Etapa 6 — Empacotar (`build.py` + `saci.spec`)
+## Etapa 6 — Empacotar (`saci.spec`) ✅ concluída
 
-- [ ] PyInstaller em modo `--onedir` (abre mais rápido que `--onefile` e o
+- [x] PyInstaller em modo `--onedir` (abre mais rápido que `--onefile` e o
       antivírus reclama menos), `--windowed` (sem console)
-- [ ] Incluir `dashboard.html` e `settings.html` como dados
-- [ ] Excluir o que não é usado: `tkinter`, `test`, `unittest`, backends de
-      imagem do Pillow que não usamos — meta: **≤ 70 MB**
-- [ ] Ícone `.ico` gerado por script a partir do mesmo desenho do pillow
-- [ ] Verificar: o `.exe` sobe, a janela abre, uma chamada real responde
+- [x] Incluir `dashboard.html` e `settings.html` como dados (`datas=` no
+      `.spec`) — ficam em `dist/Saci/_internal/saci/`, não ao lado do
+      `.exe`; `Path(__file__).parent` dentro do executável resolve
+      corretamente para lá (verificado, não presumido — ver abaixo)
+- [x] Excluído o que não é usado: `tkinter`, `test`, `unittest`, `pydoc`,
+      `doctest`, `PIL.ImageQt`, `PIL.ImageTk` — **resultado: 45 MB**,
+      bem abaixo da meta de 70 MB
+- [x] Ícone `.ico` gerado por `scripts/build_icon.py`, a partir do mesmo
+      desenho do `pillow` usado no ícone da bandeja (7 resoluções:
+      16 a 256px) — nunca dessincroniza do ícone da bandeja porque é
+      literalmente a mesma função de desenho
+- [x] Verificado: o `.exe` sobe, o servidor responde, `/dashboard` e
+      `/settings` carregam do caminho empacotado, uma chamada real de
+      chat responde, o processo aceita ser encerrado
+
+**Ícone redesenhado durante esta etapa:** a primeira versão (dois
+círculos sobrepostos) lia como uma "mordida", não como gorro. Refeito
+como um cone poligonal inclinado com pompom separado — mais
+reconhecível, inclusive em 32px (tamanho real da bandeja). A função
+`_desenhar_icone()` ganhou um parâmetro `tamanho` para servir tanto a
+bandeja (64px) quanto o `.ico` (múltiplas resoluções) sem duplicar a
+lógica de desenho.
+
+**`distutils` teve que sair da lista de exclusão:** excluí-lo colidia
+com um alias que o próprio `setuptools` cria para ele no Python 3.14
+(`ValueError: Target module "distutils" already imported as
+ExcludedModule`). O ganho de espaço de excluí-lo seria mínimo mesmo;
+não vale a complexidade de contornar.
+
+**Verificado com o `.exe` real** (não só o código Python direto):
+`Saci.exe` subiu via `subprocess.Popen`, `/health` respondeu,
+`/dashboard` (12.386 bytes) e `/settings` (9.306 bytes) carregaram do
+`_internal/saci/`, uma chamada real de chat respondeu via Groq, o
+processo permaneceu estável por 5s e aceitou ser encerrado
+(`taskkill`) sem deixar resíduo. A bandeja/janela em si já tinham sido
+validadas em profundidade na Etapa 4, rodando o mesmo código-fonte —
+não repeti esse teste dentro do `.exe` por captura de tela, mas o
+código é idêntico.
+
+**Novo extra opcional** `pyproject.toml`: `build = ["pyinstaller>=6.22"]`
+— só quem empacota precisa instalar.
 
 ## Etapa 7 — Instalador
 
