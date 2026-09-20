@@ -46,6 +46,19 @@ jobs:
             exit 1
           }
 
+      - name: Instalar o WebView2 Runtime
+        shell: pwsh
+        run: |
+          # windows-latest é Windows Server, que -- ao contrário do Windows
+          # 10/11 de usuário final -- não vem com o Edge WebView2 Runtime
+          # pré-instalado. Sem ele, webview.create_window()/start() derruba
+          # o processo inteiro antes do servidor responder, e o teste de
+          # fumaça falha por um motivo que não existe numa máquina real
+          # (ver saci.iss, que já checa e avisa sobre isso na instalação).
+          $installer = "$env:RUNNER_TEMP\MicrosoftEdgeWebview2Setup.exe"
+          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "/silent", "/install" -Wait
+
       - name: Fumaça do .exe empacotado
         shell: pwsh
         run: |
