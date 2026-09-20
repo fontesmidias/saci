@@ -206,11 +206,38 @@ nenhuma chave vazou durante o teste.
 servidor via PM2 não precisa deles). `saci/server.py::main()` ganhou um
 parâmetro `port` (era fixo em 8000) para o app poder escolher a porta.
 
-## Etapa 5 — Iniciar com o Windows
+## Etapa 5 — Iniciar com o Windows (`saci/autostart.py`) ✅ concluída
 
-- [ ] Alternável pelo menu, sem privilégio de administrador
-- [ ] Implementação: chave `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
-- [ ] Desmarcar remove a chave; desinstalar também
+- [x] Alternável pelo menu, sem privilégio de administrador — `HKCU`, não
+      `HKLM` (por usuário, não exige elevação)
+- [x] Implementação: chave `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`,
+      valor `Saci`
+- [x] Comando gravado depende do ambiente: empacotado (`sys.frozen`) grava
+      o próprio `.exe`; em desenvolvimento grava
+      `pythonw.exe -m saci.app` (resolvido a partir de `sys.executable`,
+      não do PATH — sempre o Python certo). `pythonw`, não `python`: sem
+      console, o app já tem janela e ícone próprios
+- [x] Desmarcar remove a chave (`desligar()`, idempotente — chamar duas
+      vezes não é erro). O desinstalador da Etapa 7 deve chamar isto
+      também, para não deixar entrada órfã apontando pra um `.exe` que
+      não existe mais
+- [x] Menu: item com `checked` refletindo o estado real (lido do
+      registro a cada abertura do menu) e `enabled=False` fora do
+      Windows
+
+**Verificado contra o registro REAL** (não um mock), com limpeza
+confirmada ao final:
+1. Confirmado que a chave `Saci` não existia antes do teste
+2. `ligar()` grava; verificado **fora do nosso código**, lendo a chave
+   diretamente com `winreg` num script separado — valor exatamente
+   `"<venv>\pythonw.exe" -m saci.app`
+3. `alternar()` inverte para desligado; confirmado, também fora do
+   nosso código, que a chave foi removida por completo (não ficou
+   vazia — `FileNotFoundError` ao tentar ler)
+4. `desligar()` chamado com o registro já limpo não lança exceção
+5. O item real do menu (`SaciApp._montar_menu()`) mostra `checked=False`
+   antes, liga/desliga corretamente através do próprio callback do
+   item, e o registro termina limpo
 
 ## Etapa 6 — Empacotar (`build.py` + `saci.spec`)
 

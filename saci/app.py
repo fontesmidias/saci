@@ -25,7 +25,7 @@ import httpx
 import pystray
 from PIL import Image, ImageDraw
 
-from . import paths, prefs
+from . import autostart, paths, prefs
 from .logging_setup import setup_logging
 
 _logger = setup_logging()
@@ -125,18 +125,6 @@ def _cor_para_status(dados: dict | None) -> tuple[int, int, int]:
 
 
 # ---------------------------------------------------------------------
-# Iniciar com o Windows (Etapa 5 — placeholder que a Etapa 5 completa)
-# ---------------------------------------------------------------------
-
-def _autostart_ligado() -> bool:
-    """
-    Placeholder até a Etapa 5. Hoje sempre False; o menu mostra a opção
-    desabilitada com essa informação, em vez de fingir que funciona.
-    """
-    return False
-
-
-# ---------------------------------------------------------------------
 # O aplicativo
 # ---------------------------------------------------------------------
 
@@ -213,6 +201,13 @@ class SaciApp:
         if self._janela is not None:
             self._janela.destroy()
 
+    def _alternar_autostart(self, *_args) -> None:
+        try:
+            novo = autostart.alternar()
+            _logger.info("bandeja: iniciar com o Windows -> %s", novo)
+        except Exception as exc:
+            _logger.warning("bandeja: falha ao alternar autostart: %s", exc)
+
     # --- construção do menu (dinâmico: perfis vêm do servidor) ---------
 
     def _montar_menu(self) -> pystray.Menu:
@@ -241,8 +236,9 @@ class SaciApp:
             pystray.MenuItem("Verificar catálogo agora", self._verificar_catalogo),
             pystray.MenuItem("Abrir pasta de logs", self._abrir_logs),
             pystray.MenuItem(
-                "Iniciar com o Windows (em breve)", lambda *_: None,
-                enabled=False,
+                "Iniciar com o Windows", self._alternar_autostart,
+                checked=lambda item: autostart.ligado(),
+                enabled=autostart.disponivel(),
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Sair", self._sair),
